@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supply Chain Test Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Supply Chain Dashboard - Auto Simulation Enabled</h1>
+
+        <!-- Controls -->
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Controls</h2>
+            <div class="flex flex-wrap gap-3 mb-4">
+                <button onclick="initNetwork()" class="px-4 py-2 bg-blue-600 text-white rounded">
+                    Initialize Network
+                </button>
+                <button onclick="runCycle()" class="px-4 py-2 bg-green-600 text-white rounded">
+                    Run Agent Cycle
+                </button>
+                <button onclick="loadData()" class="px-4 py-2 bg-purple-600 text-white rounded">
+                    Refresh Data
+                </button>
+                <button id="autoBtn" onclick="toggleAutoSim()" class="px-4 py-2 bg-orange-600 text-white rounded">
+                    Enable Auto Simulation
+                </button>
+            </div>
+            <div id="status" class="text-sm"></div>
+        </div>
+
+        <!-- Summary -->
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Network Summary</h2>
+            <div id="summary" class="text-gray-600">Loading...</div>
+        </div>
+
+        <!-- Nodes -->
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Network Nodes</h2>
+            <div id="nodes" class="space-y-2"></div>
+        </div>
+
+        <!-- Decisions -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Recent Decisions</h2>
+            <div id="decisions" class="space-y-2"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let autoSim = false;
+        let autoInterval = null;
+
+        function setStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `text-sm p-3 rounded ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+        }
+
+        async function initNetwork() {
+            setStatus('Initializing network...');
+            try {
+                const response = await fetch(`${API_BASE}/nodes/initialize_network/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    setStatus(`✓ Network initialized! Created ${data.nodes.length} nodes.`);
+                    await loadData();
+                } else {
+                    throw new Error(data.message || 'Failed to initialize');
+                }
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+
+        async function runCycle() {
+            setStatus('Running agent cycle...');
+            try {
+                const response = await fetch(`${API_BASE}/decisions/run_agent_cycle/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    const r = data.results;
+                    setStatus(`✓ Cycle completed! Inventory: ${r.inventory_decisions}, Transport: ${r.transport_decisions}, Alerts: ${r.service_alerts}`);
+                    await loadData();
+                } else {
+                    throw new Error(data.message || 'Cycle failed');
+                }
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+
+        async function simulateAutoChanges() {
+            try {
+                await fetch(`${API_BASE}/nodes/simulate_auto_changes/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                await loadData();
+            } catch (error) {
+                console.error("Simulation error:", error);
+                setStatus("Auto simulation failed", true);
+            }
+        }
+
+        function toggleAutoSim() {
+            autoSim = !autoSim;
+            const btn = document.getElementById('autoBtn');
+            if (autoSim) {
+                btn.textContent = "Disable Auto Simulation";
+                btn.classList.replace('bg-orange-600', 'bg-red-600');
+                setStatus('Auto simulation started (updates every 3s)...');
+                autoInterval = setInterval(simulateAutoChanges, 3000);
+            } else {
+                btn.textContent = "Enable Auto Simulation";
+                btn.classList.replace('bg-red-600', 'bg-orange-600');
+                clearInterval(autoInterval);
+                setStatus('Auto simulation stopped.');
+            }
+        }
+
+        async function loadData() {
+            try {
+                // Summary
+                const summaryRes = await fetch(`${API_BASE}/nodes/network_summary/`);
+                const summary = await summaryRes.json();
+                document.getElementById('summary').innerHTML = `
+                    <div class="grid grid-cols-3 gap-4">
+                        <div><strong>Total Nodes:</strong> ${summary.total_nodes}</div>
+                        <div><strong>Total Inventory:</strong> ${summary.total_inventory.toLocaleString()}</div>
+                        <div><strong>Utilization:</strong> ${summary.utilization_rate.toFixed(1)}%</div>
+                    </div>
+                `;
+
+                // Nodes
+                const nodesRes = await fetch(`${API_BASE}/nodes/`);
+                const nodesData = await nodesRes.json();
+                const nodes = nodesData.results || nodesData;
+
+                document.getElementById('nodes').innerHTML = nodes.map(node => {
+                    const ratio = node.current_inventory / node.inventory_capacity;
+                    const color = ratio < 0.3 ? 'red' : ratio < 0.6 ? 'yellow' : 'green';
+                    return `
+                        <div class="border rounded p-3">
+                            <div class="flex justify-between mb-2">
+                                <strong>${node.name}</strong>
+                                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">${node.code}</span>
+                            </div>
+                            <div class="text-sm text-gray-600">
+                                ${node.current_inventory.toLocaleString()} / ${node.inventory_capacity.toLocaleString()}
+                                <span class="text-${color}-600 font-semibold">(${(ratio * 100).toFixed(1)}%)</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                                <div class="bg-${color}-500 h-2 rounded-full" style="width: ${ratio * 100}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Decisions
+                const decisionsRes = await fetch(`${API_BASE}/decisions/`);
+                const decisionsData = await decisionsRes.json();
+                const decisions = (decisionsData.results || decisionsData).slice(0, 10);
+
+                document.getElementById('decisions').innerHTML = decisions.length === 0
+                    ? '<p class="text-gray-500">No decisions yet. Run an agent cycle to see decisions.</p>'
+                    : decisions.map(d => `
+                        <div class="border-l-4 border-${d.urgency === 'CRITICAL' ? 'red' : d.urgency === 'HIGH' ? 'orange' : 'blue'}-500 bg-gray-50 p-3 rounded">
+                            <div class="flex justify-between">
+                                <div>
+                                    <strong>${d.agent_name}</strong> - ${d.decision_type}
+                                    <span class="ml-2 text-xs bg-${d.urgency === 'CRITICAL' ? 'red' : 'blue'}-100 px-2 py-1 rounded">${d.urgency}</span>
+                                </div>
+                                <span class="text-xs text-gray-500">${new Date(d.created_at).toLocaleTimeString()}</span>
+                            </div>
+                            <p class="text-sm text-gray-700 mt-1">${d.reason}</p>
+                        </div>
+                    `).join('');
+
+                setStatus('✓ Data loaded successfully!');
+            } catch (error) {
+                setStatus(`Error loading data: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+
+        // Load on startup
+        loadData();
+    </script>
+</body>
+</html>

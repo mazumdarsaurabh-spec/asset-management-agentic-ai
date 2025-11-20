@@ -1,0 +1,1959 @@
+    <!DOCTYPE html>
+<html>
+<head>
+    <title>Supply Chain Live Demo</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* --- Glow highlight for step demo --- */
+        .glow-highlight {
+            animation: glowPulse 1.5s infinite;
+            box-shadow: 0 0 25px 8px rgba(59,130,246,0.8) !important;
+            border: 3px solid rgba(59,130,246,1) !important;
+            border-radius: 12px;
+            transition: box-shadow .3s, transform .2s;
+            transform-origin: center;
+        }
+        @keyframes glowPulse {
+            0% { box-shadow: 0 0 10px rgba(59,130,246,0.35); transform: translateY(0); }
+            50% { box-shadow: 0 0 40px rgba(59,130,246,0.95); transform: translateY(-3px); }
+            100% { box-shadow: 0 0 10px rgba(59,130,246,0.35); transform: translateY(0); }
+        }
+        body { margin: 0; overflow: auto; font-family: Inter, ui-sans-serif, system-ui; background: linear-gradient(180deg,#0f172a 0%, #08203a 100%); color: #e6eef8; }
+
+        .pulse-dot { animation: pulse 1.8s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.45 } }
+
+        .slide-in { animation: slide-in 0.35s ease-out; }
+        @keyframes slide-in { from { transform: translateX(-12px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+
+        .alert-pulse { animation: alertPulse 1.6s linear infinite; }
+        @keyframes alertPulse { 0% { box-shadow: 0 0 4px rgba(255,70,70,0.2) } 50% { box-shadow: 0 0 16px rgba(255,70,70,0.45) } 100% { box-shadow: 0 0 4px rgba(255,70,70,0.2) } }
+
+        /* demo overlay - resizable */
+        .demo-overlay {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            width: 480px;
+            height: 520px;
+            max-height: calc(100vh - 40px);
+            background: white;
+            border-radius: 12px;
+            resize: both;
+            overflow: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            z-index: 1100;
+            border: 3px solid #3b82f6;
+            color: #0f172a;
+        }
+        .demo-overlay .header { background: linear-gradient(90deg,#2563eb,#7c3aed); color: white; padding: 14px; border-top-left-radius: 8px; border-top-right-radius: 8px; display:flex; align-items:center; justify-content:space-between; }
+        .demo-overlay .content { padding: 14px; }
+
+        /* mini transport chart */
+        .mini-chart { display:flex; gap:12px; align-items:end; height:84px; padding:10px; }
+        .mini-chart .bar { width: 36px; border-radius:6px 6px 0 0; display:flex; align-items:flex-end; justify-content:center; color:white; font-size:12px; font-weight:700; transition: height 800ms ease-out; }
+        .mini-chart .label { text-align:center; font-size:12px; color:#374151; margin-top:6px; }
+
+        /* bottom-right Alerts & Forecast panel — small, floating, resizable, draggable */
+        .alerts-panel {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            width: 300px;
+            max-height: 45vh;
+            min-height: 180px;
+            background: rgba(255,255,255,0.98);
+            color: #061024;
+            box-shadow: 0 12px 40px rgba(3,7,18,0.35);
+            border-radius: 10px;
+            border: 1px solid rgba(8,145,255,0.15);
+            overflow-y: auto;
+            resize: both;
+            z-index: 9999;
+            padding-bottom: 6px;
+            cursor: move;
+        }
+        .alerts-panel .head {
+            padding: 8px 12px;
+            background: linear-gradient(90deg,#ef4444,#fb923c);
+            color: white;
+            font-weight: 700;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            cursor: move;
+        }
+        .alerts-panel .body {
+            padding: 10px;
+            overflow-y: auto;
+            max-height: calc(45vh - 50px);
+            font-size: 13px;
+        }
+        .alerts-panel .alert-item { margin-bottom:10px; padding:8px; border-radius:8px; background:#fff7f7; border:1px solid rgba(255,90,90,0.06); }
+        .alerts-panel .forecast { margin-top:8px; padding:8px; border-radius:8px; background:#f7fbff; border:1px solid rgba(59,130,246,0.06); }
+
+        .container { padding: 28px 40px; max-width:1200px; margin:0 auto; }
+
+        .badge { font-size:12px; padding:6px 8px; border-radius:8px; font-weight:600; display:inline-block; }
+
+        @media (max-width: 640px) {
+            .alerts-panel {
+                width: 260px !important;
+                right: 12px;
+                bottom: 12px;
+                left: auto !important;
+                max-height: 40vh;
+                resize: none;
+            }
+        }
+
+        .metrics-grid { display:grid; grid-template-columns: repeat(6, 1fr); gap:16px; margin-bottom:18px; align-items:stretch; }
+        .metric-card { padding:18px; border-radius:12px; box-shadow: 0 6px 24px rgba(2,6,23,0.45); color:white; min-height:90px; display:flex; flex-direction:column; justify-content:space-between; }
+        .metric-title { font-size:13px; opacity:0.9; }
+        .metric-value { font-size:24px; font-weight:800; }
+
+        .nodes-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; }
+        .node-card { background: #f8fafc; color:#0f172a; border-radius:10px; padding:12px; border:1px solid rgba(2,6,23,0.06); min-height:120px; }
+
+        .activity-stream { max-height:320px; overflow:auto; padding:12px; background: #ffffff; border-radius:8px; color:#0b1720; }
+
+        .muted { color:#5b6b75; font-size:13px; }
+
+        .currency { font-weight:800; }
+
+        /* Live Metrics bars: keep old look but responsive to container width */
+        .live-metrics-wrap { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+        .live-metric-bars { display:flex; gap:12px; align-items:flex-end; height:82px; justify-content:center; }
+        .live-metric-bars .bar-col { display:flex; flex-direction:column; align-items:center; width:48px; }
+        .live-metric-bars .bar { width:100%; border-radius:6px; transition: height 600ms ease; display:flex; align-items:flex-end; justify-content:center; }
+        .live-metric-labels { display:flex; justify-content:space-between; font-size:12px; }
+        .live-metric-labels span { width:48px; text-align:center; display:inline-block; }
+    </style>
+</head>
+<body>
+
+    <!-- Live Demo Overlay -->
+    <div id="demoOverlay" class="demo-overlay" style="display:none;">
+        <div class="header">
+            <div style="display:flex;align-items:center; gap:10px;">
+                <div class="w-3 h-3 rounded-full" style="background:#fff; box-shadow:0 0 6px rgba(255,255,255,0.6)"></div>
+                <div style="font-weight:800; font-size:15px;">LIVE DEMO MODE</div>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button onclick="toggleDemoSize()" title="Expand" style="background:transparent;border:none;color:white;font-size:14px;">⤢</button>
+                <button onclick="closeDemo()" title="Close" style="background:transparent;border:none;color:white;font-size:18px;">✕</button>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- slides -->
+            <div id="stepDemoSlides" class="">
+                <div style="font-weight:800; color:#0f172a; margin-bottom:10px;">🎯 Agentic Supply Chain Demo</div>
+
+                <div id="slideContent" class="bg-white p-3 rounded shadow-sm" style="min-height:96px;"></div>
+
+                <!-- mini chart -->
+                <div id="transportChartWrap" style="margin-top:12px;display:none;">
+                    <div id="transportTitle"
+     style="font-size:12px; color:#334155; font-weight:700; margin-bottom:6px; display:none;">
+    Transport Cost Comparison
+</div>
+                    <div class="mini-chart" id="miniChart">
+                        <!-- bars injected by JS -->
+                    </div>
+                    <div style="display:flex; gap:18px; justify-content:space-between; margin-top:6px;">
+                        <div class="muted" style="font-size:12px;">WH1 → STORE1</div>
+                        <div class="muted" style="font-size:12px;">DC1 → STORE1</div>
+                        <div class="muted" style="font-size:12px;">STORE2 → STORE1</div>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:8px; justify-content:space-between; margin-top:12px;">
+                    <button id="prevSlideBtn" onclick="prevSlide()" class="px-3 py-1 bg-gray-100 rounded text-sm">⬅ Prev</button>
+                    <div style="display:flex; gap:8px;">
+                        <div id="transportCostSmall" class="badge" style="background:#eef2ff; color:#312e81;">Transport: <span class="currency" id="overlayTransportCost">$0</span></div>
+                        <div id="serviceCostSmall" class="badge" style="background:#fff0f6; color:#9f1239;">Service: <span class="currency" id="overlayServiceCost">$0</span></div>
+                        <button id="nextSlideBtn" onclick="nextSlide()" class="px-3 py-1 bg-blue-600 text-white rounded text-sm">Next ➡</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- demo info blocks -->
+            <div style="margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div style="background:#f1f5f9; padding:8px; border-radius:8px;">
+                    <div style="font-weight:700; color:#0f172a;">📊 Current Operation</div>
+                    <div id="demoStatus" class="muted">Waiting for action...</div>
+                </div>
+                <div style="background:#f8fafc; padding:8px; border-radius:8px;">
+                    <div style="font-weight:700; color:#0f172a;">🎯 Active Node</div>
+                    <div id="demoNode" class="muted">No node selected</div>
+                </div>
+            </div>
+
+            <div style="margin-top:10px; display:flex; gap:10px;">
+                <div style="flex:1; background:#fff; padding:8px; border-radius:8px;">
+                    <div style="font-weight:700; color:#0f172a;">📝 Recent Activity</div>
+                    <div id="demoActivity" class="muted" style="max-height:100px; overflow:auto;"></div>
+                </div>
+                <div style="flex:1; background:#fff; padding:8px; border-radius:8px;">
+                    <div style="font-weight:700; color:#0f172a;">📈 Live Metrics</div>
+                    <div id="demoMetrics" class="muted"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts & Forecast Panel (Option A - bottom-right fixed) -->
+    <div class="alerts-panel" id="alertsPanel" style="display:none;">
+        <div class="head">
+            <div class="title">⚠ Active Alerts</div>
+            <div id="alertsCountBadge" class="badge" style="background:rgba(0,0,0,0.12); color:white;">0</div>
+        </div>
+        <div class="body">
+            <div id="alertsList"></div>
+
+            <div class="forecast" id="forecastBlock" style="margin-top:10px;">
+                <div style="font-weight:700; margin-bottom:6px;">🔮 Forecast & Planning</div>
+                <div id="forecastText" style="font-size:13px; color:#0b3a54;">No forecasts yet</div>
+                <div id="planText" style="font-size:13px; color:#0b3a54; margin-top:6px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard (container) -->
+    <div class="container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+                <h1 style="font-size:28px; margin:0; font-weight:900;">🚀 Supply Chain Agent System</h1>
+                <div class="muted" style="margin-top:4px;">Real-Time Multi-Agent Optimization Platform</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="display:flex; gap:10px; align-items:center; justify-content:flex-end;">
+                    <div id="statusDot" style="width:12px; height:12px; border-radius:999px; background:#10b981; box-shadow:0 0 8px rgba(16,185,129,0.6)"></div>
+                    <div id="timestamp" class="muted"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- controls -->
+        <div style="background:rgba(255,255,255,0.03); padding:14px; border-radius:10px; margin-bottom:14px;">
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button onclick="startLiveMode()" class="px-4 py-2 bg-red-600 text-white rounded">🔴 LIVE Mode</button>
+                <button onclick="startStepDemo()" class="px-4 py-2 bg-blue-600 text-white rounded">🎬 Step Demo Mode</button>
+                <button onclick="simulateTransaction()" class="px-4 py-2 bg-green-600 text-white rounded">💫 Simulate Transaction</button>
+                <button onclick="runAgentCycle()" class="px-4 py-2 bg-purple-600 text-white rounded">🤖 Run Agent Cycle</button>
+                <button onclick="stopLiveMode()" class="px-4 py-2 bg-gray-600 text-white rounded">⏸ Stop</button>
+                <div style="flex:1"></div>
+                <div id="status" class="muted" style="background:rgba(255,255,255,0.02); padding:8px 12px; border-radius:8px;"></div>
+            </div>
+        </div>
+
+        <!-- metrics -->
+        <div class="metrics-grid" style="margin-bottom:18px;">
+            <div id="metric1" class="metric-card" style="background:linear-gradient(180deg,#2563eb,#1e40af);">
+                <div class="metric-title">Total Inventory</div>
+                <div id="totalInventory" class="metric-value">0</div>
+            </div>
+            <div id="metric2" class="metric-card" style="background:linear-gradient(180deg,#7c3aed,#6d28d9);">
+                <div class="metric-title">Transactions</div>
+                <div id="totalTransactions" class="metric-value">0</div>
+            </div>
+            <div id="metric3" class="metric-card" style="background:linear-gradient(180deg,#16a34a,#047857);">
+                <div class="metric-title">Utilization Rate</div>
+                <div id="utilization" class="metric-value">0%</div>
+            </div>
+            <div id="metric4" class="metric-card" style="background:linear-gradient(180deg,#f97316,#ea580c);">
+                <div class="metric-title">Active Alerts</div>
+                <div id="alerts" class="metric-value">0</div>
+            </div>
+
+            <!-- new cost metrics -->
+            <div id="metric5" class="metric-card" style="background:linear-gradient(180deg,#4f46e5,#4338ca);">
+                <div class="metric-title">Total Transport Cost</div>
+                <div id="transportCost" class="metric-value currency">$0</div>
+            </div>
+            <div id="metric6" class="metric-card" style="background:linear-gradient(180deg,#db2777,#be185d);">
+                <div class="metric-title">Service Level Cost</div>
+                <div id="serviceCost" class="metric-value currency">$0</div>
+            </div>
+        </div>
+        <!-- nodes -->
+        <div style="margin-bottom:16px;">
+            <h2 style="margin:0 0 8px 0;">📦 Network Nodes - Live Status</h2>
+            <div id="nodes" class="nodes-grid"></div>
+        </div>
+
+        <!-- activity stream -->
+        <div>
+            <h2 style="margin:0 0 8px 0;">🤖 Agent Activity Stream</h2>
+            <div id="activityStream" class="activity-stream"></div>
+        </div>
+    </div>
+
+<script>
+const API = '/api';            // adjust if needed
+let previousData = {};
+let transactionCount = 0;
+let isLiveMode = false;
+let liveInterval = null;
+let currentSlide = 0;
+
+/* --- Slide mapping (kept exactly as requested) --- */
+const stepSlides = [
+
+    {
+        
+        title: "1️⃣ How It Works – Full System Flow",
+        text: `
+            The system follows a closed-loop cycle: Initialize Network → 
+            Process Demand → Decide Actions → Update Dashboard.
+            This is the foundation of the Agentic Supply Chain.
+        `,
+        highlight: null   // No highlight for this slide
+    },
+
+    {
+        title: "2️⃣ Network Initialization",
+        text: "The system initializes all supply chain nodes including suppliers, factories, warehouses, and hubs.",
+        highlight: "nodes"
+    },
+    {
+        title: "3️⃣ Inventory Monitoring",
+        text: "Each node’s inventory is continuously monitored to prevent stock-outs and excess stock. (AI watches inventory, raises reorder suggestions.)",
+        highlight: "metric1"
+    },
+    {
+        title: "4️⃣ Capacity & Utilization Tracking",
+        text: "Utilization rates help the AI detect overloaded or underutilized nodes and plan rebalancing.",
+        highlight: "metric3"
+    },
+    {
+        title: "5️⃣ Transportation Optimization",
+        text: "The Transportation Agent compares possible sources (WH1, DC1, STORE2) to fulfill Store1 shortage, estimates per-route transport cost and chooses the cheapest option.",
+        highlight: "metric5"
+    },
+    {
+        title: "6️⃣ Demand Forecasting",
+        text: "Agent forecasts upcoming shortages using recent demand patterns and recommends advance inventory planning to avoid stockouts.",
+        highlight: "activityStream"
+    },
+    {
+        title: "7️⃣ Automated Decision Making",
+        text: "The Coordinator Agent triggers reorder or transport: it chooses the lowest cost transport option, or places a reorder when transfer isn't cost-effective.",
+        highlight: "alerts"
+    },
+    {
+        title: "8️⃣ Live Closed-Loop Optimization (AI vs Human)",
+        text: "Human: Manually compare options and react slowly. \n\nAI: Evaluates transport cost + service cost and executes the best action instantly — ensuring low cost and high service levels.",
+        highlight: "status"
+    },
+
+      {
+        title: "9️⃣ Agentic AI vs Normal Gen-AI",
+        text: "Agentic AI adds coordination, reasoning, memory, and multi-step planning—far beyond the single-task intelligence of normal Gen-AI.",
+        highlight: "transportChartWrap"
+    }
+
+
+];
+
+/* --- utility functions --- */
+function $(id){ return document.getElementById(id); }
+function fmtMoney(v){ return '$' + Number(v||0).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function updateTimestamp(){ const ts = $('timestamp'); if(ts) ts.textContent = new Date().toLocaleTimeString(); }
+
+/* --- status text --- */
+function setStatus(msg, color='blue'){
+    const el = $('status');
+    if(!el) return;
+    el.textContent = msg;
+    el.style.background = '';
+    el.style.color = '';
+}
+
+/* --- demo overlay helpers --- */
+function openOverlay(){ $('demoOverlay').style.display = 'block'; $('alertsPanel').style.display = 'block'; }
+function closeDemo(){ $('demoOverlay').style.display = 'none'; clearHighlights(); }
+function toggleDemoSize(){
+    const box = $('demoOverlay');
+    if(!box) return;
+    if(box.dataset.expanded === '1'){
+        box.style.width = '480px'; box.style.height = '520px'; box.dataset.expanded = '0';
+    } else {
+        box.style.width = '840px'; box.style.height = '80vh'; box.dataset.expanded = '1';
+    }
+}
+
+/* --- draw nodes/cards --- */
+async function loadData(){
+    try {
+        const [nodesRes, summaryRes] = await Promise.all([
+            fetch(`${API}/nodes/`),
+            fetch(`${API}/nodes/network_summary/`)
+        ]);
+        const nodesData = await nodesRes.json();
+        const summary = await summaryRes.json();
+        const nodes = nodesData.results || nodesData;
+
+        // update metrics
+        animateValue('totalInventory', summary.total_inventory || 0);
+        animateValue('utilization', (summary.utilization_rate||0).toFixed(1) + '%');
+
+        // render nodes
+        const nodesHTML = (nodes || []).map(n => {
+            const ratio = (n.current_inventory / Math.max(1,n.inventory_capacity));
+            let color = '#ef4444';
+            if(ratio >= 0.6) color = '#16a34a';
+            else if(ratio >= 0.3) color = '#f59e0b';
+            return `<div data-node-id="${n.id}" class="node-card" id="node-${n.id}">
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <div style="font-weight:800;">${n.name}</div>
+                    <div class="badge" style="background:${color}; color:white;">${n.code}</div>
+                </div>
+                <div class="muted" style="margin-top:6px;">${n.node_type}</div>
+                <div style="margin-top:10px; display:flex; justify-content:space-between; align-items:end;">
+                    <div>
+                        <div style="font-weight:800; font-size:20px;">${Number(n.current_inventory).toLocaleString()}</div>
+                        <div class="muted">/ ${Number(n.inventory_capacity).toLocaleString()}</div>
+                    </div>
+                    <div style="width:120px;">
+                        <div style="height:10px; background:#e6eef8; border-radius:6px; overflow:hidden;">
+                            <div style="height:10px; width:${Math.max(0, Math.min(100, ratio*100))}%; background:${color}; transition: width 800ms ease;"></div>
+                        </div>
+                        <div class="muted" style="text-align:right; font-size:12px; margin-top:6px;">${(ratio*100).toFixed(1)}%</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        $('nodes').innerHTML = nodesHTML;
+
+        updateTimestamp();
+    } catch(err){
+        console.error('loadData error', err);
+    }
+}
+
+/* animate numeric changes */
+function animateValue(id, value, suffix=''){
+    const el = $(id);
+    if(!el) return;
+    const cur = parseInt(el.textContent.replace(/[^0-9\-]/g,''))||0;
+    const target = typeof value === 'number' ? value : parseFloat((value+'').replace(/[^0-9\.\-]/g,''))||0;
+    if(cur === target) { el.textContent = (suffix? (target+suffix) : target.toString()); return; }
+    el.classList.add('slide-in');
+    setTimeout(()=>el.classList.remove('slide-in'), 400);
+    // simple tween
+    const duration=600, steps=30, stepVal=(target-cur)/steps, stepTime=Math.max(10,duration/steps);
+    let step=0;
+    const iv = setInterval(()=>{ step++; const v=Math.round(cur + stepVal*step); el.textContent = (suffix? v+suffix : v.toLocaleString()); if(step>=steps){ clearInterval(iv); el.textContent = (suffix? target+suffix : target.toLocaleString()); } }, stepTime);
+}
+
+/* clear existing highlights */
+function clearHighlights(){
+    document.querySelectorAll('.glow-highlight').forEach(e=>e.classList.remove('glow-highlight'));
+}
+
+/* --- step demo (click-only) --- */
+function startStepDemo(){
+    openOverlay();
+    $('stepDemoSlides').classList.remove('hidden');
+    currentSlide = 0;
+    showSlide(currentSlide);
+    setStatus('Step Demo Mode Running...', 'blue');
+}
+
+function renderInventoryBars() {
+    const wrap = $('miniChart');
+    if (!wrap) return;
+
+    const panelHeight = $('transportChartWrap').clientHeight;
+    const maxBarHeight = Math.max(40, panelHeight * 0.55);
+
+    const cards = [...document.querySelectorAll('.node-card')];
+    wrap.innerHTML = "";
+
+    if (cards.length === 0) {
+        wrap.innerHTML = `<div class="muted">No nodes found</div>`;
+        return;
+    }
+
+    // Extract numeric % directly (NO innerText → NO LAG)
+    const nodes = cards.map(card => {
+        const name = card.querySelector("div")?.innerText.trim() || "Node";
+        const current = parseInt(card.querySelector(".inv-value")?.innerText ?? "0");
+        const cap = parseInt(card.querySelector(".inv-cap")?.innerText ?? "1");
+        const pct = Math.round((current / cap) * 100);
+        return { name, current, cap, pct };
+    });
+
+    const maxPct = Math.max(...nodes.map(n => n.pct), 1);
+    const colors = ['#2563eb','#4f46e5','#db2777','#16a34a','#f59e0b','#0ea5e9','#8b5cf6'];
+
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "repeat(auto-fit, minmax(70px, 1fr))";
+    wrap.style.gap = "12px";
+
+    nodes.forEach((node, i) => {
+        const col = document.createElement("div");
+        col.style.display = "flex";
+        col.style.flexDirection = "column";
+        col.style.alignItems = "center";
+
+        const barContainer = document.createElement("div");
+        barContainer.style.display = "flex";
+        barContainer.style.alignItems = "flex-end";
+        barContainer.style.height = maxBarHeight + "px";
+        barContainer.style.width = "100%";
+
+        const bar = document.createElement("div");
+        const height = Math.max(6, Math.round((node.pct / maxPct) * maxBarHeight));
+        bar.style.height = height + "px";
+        bar.style.width = "60%";
+        bar.style.borderRadius = "6px";
+        bar.style.background = colors[i % colors.length];
+
+        barContainer.appendChild(bar);
+
+        const nameLabel = document.createElement("div");
+        nameLabel.style.fontSize = "11px";
+        nameLabel.style.marginTop = "4px";
+        nameLabel.style.textAlign = "center";
+        nameLabel.style.whiteSpace = "normal";
+        nameLabel.innerText = node.name;
+
+        const pctLabel = document.createElement("div");
+        pctLabel.style.fontSize = "10px";
+        pctLabel.style.color = "#64748b";
+        pctLabel.innerText = `${node.current} (${node.pct}%)`;
+
+        col.appendChild(barContainer);
+        col.appendChild(nameLabel);
+        col.appendChild(pctLabel);
+
+        wrap.appendChild(col);
+    });
+}
+
+
+/* showSlide: per-slide content and highlighting */
+function showSlide(index) {
+    clearHighlights();
+    const slide = stepSlides[index];
+    if (!slide) return;
+
+    // Set title + description
+    $('slideContent').innerText = slide.text;
+    $('demoStatus').textContent = slide.title;
+
+    // RESET inner overlay blocks
+    $('demoNode').innerHTML = "";
+    $('demoMetrics').innerHTML = "";
+    $('transportChartWrap').style.display = 'block';
+    $('miniChart').innerHTML = "";
+
+    /* -----------------------------
+       PER-SLIDE CONTENT GENERATION
+    ------------------------------*/
+
+    /* SLIDE 1 — Show all node names only */
+/* SLIDE 1 — Show all node names inside miniChart */
+/* SLIDE 1 — Clean Node Names List (No Image, Never Overlaps) */
+/* SLIDE 1 — Node Names Only */
+/* SLIDE 1 — Node Names Only */
+/* SLIDE 1 — Node Names Only */
+
+if (index === 0) {
+    // Show miniChart area
+    $('transportChartWrap').style.display = 'block';
+
+    // Hide transport labels
+    document.querySelector('#transportChartWrap > div:first-child').style.display = "none";
+    document.querySelectorAll('#transportChartWrap .muted').forEach(el => el.style.display = 'none');
+
+    const wrap = $('miniChart');
+    wrap.innerHTML = "";
+    wrap.style.display = "flex";
+    wrap.style.flexDirection = "column";
+    wrap.style.alignItems = "center";
+    wrap.style.justifyContent = "center";
+
+    // Insert the HOW IT WORKS image
+    const img = document.createElement("img");
+    img.src = "/static/images/how_it_works.png";      // <--- IMPORTANT
+    img.style.width = "100%";
+    img.style.borderRadius = "8px";
+    img.style.boxShadow = "0 4px 16px rgba(0,0,0,0.25)";
+    wrap.appendChild(img);
+
+    // Slide text
+    $('slideContent').innerHTML = `
+        <div class="slide-in">
+            <div style="font-weight:700; font-size:15px; margin-bottom:6px;">
+                🚀 How the Agentic Supply Chain Works
+            </div>
+            <div style="font-size:13px; color:#334155;">
+                This is the full cycle: The system initializes the network → processes demand →
+                analyzes inventory → decides actions → and updates the real-time dashboard.
+            </div>
+        </div>
+    `;
+
+    return; // stop further checks
+}
+
+
+if (index === 1) {
+
+    const mini = $('miniChart');
+
+    // turn miniChart into a grid for node names
+    mini.style.display = "grid";
+    mini.style.gridTemplateColumns = "repeat(auto-fit, minmax(110px, 1fr))";
+    mini.style.gap = "8px";
+    mini.style.padding = "8px";
+    mini.style.background = "#ffffff";
+    mini.style.borderRadius = "8px";
+    mini.style.minHeight = "120px";
+
+    // get dynamic node names from node-cards
+    const nodes = Array.from(document.querySelectorAll(".node-card"));
+    const names = nodes.map(n => {
+        const title = n.querySelector("div > div");
+        return title ? title.innerText.trim() : "Node";
+    });
+
+    // add header
+    const header = document.createElement("div");
+    header.style.gridColumn = "1 / -1";
+    header.style.fontWeight = "700";
+    header.style.fontSize = "14px";
+    header.innerText = "📦 Network Nodes";
+    mini.appendChild(header);
+
+    // populate node names
+    names.forEach(name => {
+        const tile = document.createElement("div");
+        tile.style.fontSize = "12px";
+        tile.style.fontWeight = "600";
+        tile.style.background = "#f1f5f9";
+        tile.style.border = "1px solid #e2e8f0";
+        tile.style.borderRadius = "6px";
+        tile.style.padding = "6px";
+        tile.style.textAlign = "center";
+        tile.style.whiteSpace = "nowrap";
+        tile.style.overflow = "hidden";
+        tile.style.textOverflow = "ellipsis";
+        tile.innerText = name;
+        mini.appendChild(tile);
+    });
+
+    return; // stop - don't show transport chart
+}
+
+
+    /* SLIDE 2 — Show inventory of each node */
+    /* SLIDE 2 — Dynamic Inventory Bar Chart (Responsive to Panel Size) */
+if (index === 2) {
+
+    $('transportChartWrap').style.display = 'block';
+    document.querySelectorAll('#transportChartWrap .muted')
+        .forEach(el => el.style.display = 'none');
+
+    // Hide "Transport Cost Comparison"
+    document.querySelector('#transportChartWrap > div:first-child').style.display = "none";
+
+    const wrap = $('miniChart');
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "repeat(auto-fit, minmax(70px, 1fr))";
+    wrap.style.gap = "12px";
+    wrap.innerHTML = "";
+
+    /* --- Generate Dummy Node Data --- */
+    const nodeCards = Array.from(document.querySelectorAll(".node-card"));
+
+    // generate 7 dummy values between 30% and 95%
+    const nodes = nodeCards.map((card, idx) => {
+        const name = card.querySelector("div")?.innerText.trim() || `Node ${idx+1}`;
+
+        const pct = Math.floor(Math.random() * 60) + 30;  // 30%–90%
+        const current = pct * 100;                        // dummy quantity
+        const cap = 10000;                                // dummy capacity
+
+        return { name, pct, current, cap };
+    });
+
+    if (nodes.length === 0) {
+        wrap.innerHTML = `<div class='muted'>No nodes found</div>`;
+        return;
+    }
+
+    /* --- Scale bars based on highest percentage --- */
+    const maxPct = Math.max(...nodes.map(n => n.pct), 1);
+
+    const colors = ['#16a34a','#16a34a','#f59e0b','#dc2626','#f59e0b','#dc2626','#f59e0b'];
+
+    const panelHeight = $('transportChartWrap').clientHeight;
+    const maxBarHeight = Math.max(40, panelHeight * 0.55);
+
+    /* --- Build dynamic dummy bars --- */
+    nodes.forEach((node, i) => {
+
+        const col = document.createElement("div");
+        col.style.display = "flex";
+        col.style.flexDirection = "column";
+        col.style.alignItems = "center";
+        col.style.width = "80px";
+
+        const barContainer = document.createElement("div");
+        barContainer.style.display = "flex";
+        barContainer.style.alignItems = "flex-end";
+        barContainer.style.height = maxBarHeight + "px";
+        barContainer.style.width = "100%";
+
+        const bar = document.createElement("div");
+        const height = Math.max(6, Math.round((node.pct / maxPct) * maxBarHeight));
+
+        bar.style.height = height + "px";
+        bar.style.width = "55%";
+        bar.style.borderRadius = "6px";
+        bar.style.background = colors[i % colors.length];
+
+        barContainer.appendChild(bar);
+
+        const nameLabel = document.createElement("div");
+        nameLabel.style.fontSize = "11px";
+        nameLabel.style.marginTop = "4px";
+        nameLabel.style.color = "#334155";
+        nameLabel.style.textAlign = "center";
+        nameLabel.textContent = node.name;
+
+        const pctLabel = document.createElement("div");
+        pctLabel.style.fontSize = "10px";
+        pctLabel.style.color = "#475569";
+        pctLabel.textContent = `${node.current} (${node.pct}%)`;
+
+        col.appendChild(barContainer);
+        col.appendChild(nameLabel);
+        col.appendChild(pctLabel);
+
+        wrap.appendChild(col);
+    });
+}
+
+
+    /* SLIDE 3 — Utilization of each node */
+    /* --------------------------------------------------
+   SLIDE 3 — Utilization Comparison (AI Justification)
+-------------------------------------------------- */
+if (index === 3) {
+
+    // Show chart area
+    $('transportChartWrap').style.display = 'block';
+    const panel = $('transportChartWrap');
+    panel.style.display = "block";
+    panel.style.minHeight = "260px";
+    panel.style.height = "260px";
+
+    // Hide "Transport Cost Comparison" title
+    document.querySelector('#transportChartWrap > div:first-child').style.display = "none";
+
+    // Clear and prepare miniChart
+   const wrap = $('miniChart');
+wrap.style.display = "flex";
+wrap.style.flexWrap = "wrap";
+wrap.style.justifyContent = "center";
+wrap.style.alignItems = "flex-end";
+wrap.style.gap = "18px";
+wrap.innerHTML = "";
+
+
+    // Add AI explanation at the top
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">
+            📊 Utilization Rates — How AI Detects Issues
+        </div>
+        <div style="font-size:13px; color:#334155;">
+            AI checks which nodes are overloaded or underutilized.
+            This helps it decide:
+            <br>• where rebalancing is needed
+            <br>• which nodes can donate stock
+            <br>• which nodes require urgent replenishment
+        </div>
+    `;
+
+    /* --- Create Dummy Utilization Data (30%–95%) --- */
+    const nodeCards = Array.from(document.querySelectorAll('.node-card'));
+
+    const nodes = nodeCards.map((card, i) => {
+        const name = card.querySelector("div")?.innerText.trim() || `Node ${i+1}`;
+
+        const pct = Math.floor(Math.random() * 65) + 30;  // 30–95%
+
+        return { name, pct };
+    });
+
+    if (nodes.length === 0) {
+        wrap.innerHTML = `<div class='muted'>No nodes found</div>`;
+        return;
+    }
+
+    /* --- Normalize heights --- */
+    const maxPct = Math.max(...nodes.map(n => n.pct), 1);
+    const colors = ['#16a34a','#4f46e5','#16a34a','#16a34a','#f59e0b','#dc2626','#8b5cf6'];
+
+    const panelHeight = $('transportChartWrap').clientHeight;
+    const maxBarHeight = Math.max(40, panelHeight * 0.55);
+
+    /* --- Build Comparison Bars --- */
+    nodes.forEach((node, i) => {
+
+        const col = document.createElement("div");
+        col.style.display = "flex";
+        col.style.flexDirection = "column";
+        col.style.alignItems = "center";
+        col.style.width = "80px";
+
+        const barContainer = document.createElement("div");
+        barContainer.style.display = "flex";
+        barContainer.style.alignItems = "flex-end";
+        barContainer.style.height = maxBarHeight + "px";
+        barContainer.style.width = "100%";
+
+        const bar = document.createElement("div");
+        const height = Math.max(6, Math.round((node.pct / maxPct) * maxBarHeight));
+
+        bar.style.height = height + "px";
+        bar.style.width = "55%";
+        bar.style.borderRadius = "6px";
+        bar.style.background = colors[i % colors.length];
+        bar.style.transition = "height 0.4s ease";
+
+        barContainer.appendChild(bar);
+
+        const nameLabel = document.createElement("div");
+        nameLabel.style.fontSize = "11px";
+        nameLabel.style.marginTop = "4px";
+        nameLabel.style.color = "#334155";
+        nameLabel.style.textAlign = "center";
+        nameLabel.textContent = node.name;
+
+        const pctLabel = document.createElement("div");
+        pctLabel.style.fontSize = "10px";
+        pctLabel.style.color = "#475569";
+        pctLabel.textContent = `${node.pct}%`;
+
+        col.appendChild(barContainer);
+        col.appendChild(nameLabel);
+        col.appendChild(pctLabel);
+
+        wrap.appendChild(col);
+    });
+}
+
+    /* SLIDE 4 — Transport cost chart */
+    /* --------------------------------------------------
+   SLIDE 4 — Transport Cost Comparison
+-------------------------------------------------- */
+if (index === 4) {
+
+    // Show transport chart container
+    $('transportChartWrap').style.display = 'block';
+
+    // Show the chart title ONLY for slide 4
+    const chartTitle = document.querySelector('#transportChartWrap > div:first-child');
+    chartTitle.style.display = "block";
+    chartTitle.innerHTML = `<b>🚚 Transport Cost Comparison</b>`;
+
+    const wrap = $('miniChart');
+    wrap.style.display = "flex";
+    wrap.style.justifyContent = "space-around";
+    wrap.style.alignItems = "flex-end";
+    wrap.style.height = "140px";
+    wrap.style.gap = "14px";
+    wrap.innerHTML = "";
+
+    // ❗ Get the last transport decisions from dashboard
+    let decisions = window.lastTransportDecisions || [];
+
+    // If no real data exists → create dummy data
+    if (!decisions.length) {
+        decisions = [
+            { from: "WH1", to: "Store 1", cost: 42 },
+            { from: "DC2", to: "Store 2", cost: 71 },
+            { from: "WH2", to: "Store 3", cost: 55 }
+        ];
+    }
+
+    // Sort: lowest → highest cost
+    decisions.sort((a, b) => a.cost - b.cost);
+
+    const max = Math.max(...decisions.map(d => d.cost), 1);
+    const colors = ["#16a34a", "#f59e0b", "#dc2626"]; 
+    // green = best, yellow = medium, red = high
+
+    // AI chooses smallest cost
+    const aiChoice = decisions[0];
+
+    decisions.forEach((d, i) => {
+        const col = document.createElement("div");
+        col.style.display = "flex";
+        col.style.flexDirection = "column";
+        col.style.alignItems = "center";
+
+        const barHeight = Math.max(20, Math.round((d.cost / max) * 90));
+
+        const bar = document.createElement("div");
+        bar.style.height = barHeight + "px";
+        bar.style.width = "32px";
+        bar.style.borderRadius = "6px";
+        bar.style.background = colors[i];
+        bar.style.transition = "height 0.4s ease";
+
+        const label = document.createElement("div");
+        label.style.fontSize = "11px";
+        label.style.marginTop = "4px";
+        label.style.textAlign = "center";
+        label.style.color = "#334155";
+        label.innerHTML = `${d.from} → ${d.to}`;
+
+        const costLabel = document.createElement("div");
+        costLabel.style.fontSize = "10px";
+        costLabel.style.color = "#475569";
+        costLabel.textContent = `$${d.cost}`;
+
+        col.appendChild(bar);
+        col.appendChild(label);
+        col.appendChild(costLabel);
+        wrap.appendChild(col);
+    });
+
+    // ------------------------------------------------
+    // Highlight Box — AI Choice Explanation
+    // ------------------------------------------------
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">
+            🤖 AI Transport Optimization
+        </div>
+        <div style="padding:8px; background:#ecfdf5; border-left:4px solid #16a34a; border-radius:6px; font-size:13px; color:#065f46;">
+            AI chooses the <b>lowest transport cost route</b>:
+            <br><br>
+            <b>${aiChoice.from} → ${aiChoice.to}</b>
+            <br>
+            Cost: <b>$${aiChoice.cost}</b>
+            <br><br>
+            ✔ Saves fuel
+            <br>✔ Reduces operational cost
+            <br>✔ Faster decision-making than a human
+        </div>
+    `;
+}
+
+    /* SLIDE 5 — Forecasting & Planning */
+    /* --------------------------------------------------
+   SLIDE 5 — Forecasting & Planning
+   Shows how AI predicts shortages & plans ahead
+-------------------------------------------------- */
+if (index === 5) {
+
+    // Show miniChart area but hide transport title
+    $('transportChartWrap').style.display = 'block';
+    const chartTitle = document.querySelector('#transportChartWrap > div:first-child');
+    chartTitle.style.display = "block";
+    chartTitle.innerHTML = `<b>🔮 Forecast & Planning</b>`;
+
+    const wrap = $('miniChart');
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "repeat(auto-fit, minmax(110px, 1fr))";
+    wrap.style.gap = "14px";
+    wrap.innerHTML = "";
+
+    // -----------------------------------------
+    // Extract node inventory + demand pattern
+    // -----------------------------------------
+    const nodes = Array.from(document.querySelectorAll('.node-card')).map(card => {
+        const titleEl = card.querySelector("div");
+        const name = titleEl ? titleEl.innerText.trim() : "Node";
+
+        const invMatch = card.innerText.match(/([\d,]+)\s*\/\s*([\d,]+)/);
+
+        let current = 0;
+        let cap = 1;
+
+        if (invMatch) {
+            current = parseInt(invMatch[1].replace(/,/g, "")) || 0;
+            cap = parseInt(invMatch[2].replace(/,/g, "")) || 1;
+        }
+
+        // Generate dummy demand pattern (AI prediction)
+        const recentDemand = Math.floor(Math.random() * 120) + 50;
+
+        // Forecast 3 days ahead
+        const projected = Math.round(current - recentDemand * 3);
+
+        return { name, current, cap, recentDemand, projected };
+    });
+
+    // -----------------------------------------
+    // Build Planning Forecast Cards
+    // -----------------------------------------
+    nodes.forEach(node => {
+        const col = document.createElement("div");
+        col.style.padding = "10px";
+        col.style.borderRadius = "8px";
+        col.style.background = "#f1f5f9";
+        col.style.fontSize = "12px";
+        col.style.color = "#334155";
+        col.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
+
+        const shortageAlert =
+            node.projected < 0
+                ? `<div style="color:#dc2626; font-weight:700; margin-top:4px;">
+                       ⚠ Shortage Expected in 3 Days
+                   </div>`
+                : `<div style="color:#16a34a; font-weight:600; margin-top:4px;">
+                       ✓ Safe for next 3 days
+                   </div>`;
+
+        const recommendation =
+            node.projected < 0
+                ? `<div style="margin-top:6px; background:#fff7ed; padding:6px; border-left:3px solid #f97316;">
+                       Recommended Reorder: 
+                       <b>${Math.abs(node.projected) + 50} units</b>
+                   </div>`
+                : `<div style="margin-top:6px; color:#475569;">
+                       No immediate reorder required
+                   </div>`;
+
+        col.innerHTML = `
+            <b>${node.name}</b>
+            <br>
+            Current: <b>${node.current}</b>
+            <br>
+            Recent Daily Demand: <b>${node.recentDemand}</b>
+            <br>
+            3-Day Forecast: 
+            <b>${node.projected}</b>
+            ${shortageAlert}
+            ${recommendation}
+        `;
+
+        wrap.appendChild(col);
+    });
+
+    // ------------------------------------------------
+    // RIGHT PANEL EXPLANATION
+    // ------------------------------------------------
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">
+            🔮 AI Forecasts & Inventory Planning
+        </div>
+
+        <div style="font-size:13px; line-height:1.5; color:#334155;">
+            The Agent analyzes recent demand patterns and predicts 
+            <b>future inventory shortages</b> before they happen.
+            <br><br>
+            ✔ Predicts 3-day inventory levels<br>
+            ✔ Identifies upcoming stockouts<br>
+            ✔ Recommends advance replenishment<br>
+            ✔ Helps avoid emergency transport costs<br>
+            ✔ Maintains a smooth supply chain
+        </div>
+
+        <div style="margin-top:10px; padding:10px; background:#eef2ff; border-radius:8px; border-left:4px solid #4f46e5;">
+            <b>AI Benefit:</b><br>
+            Prevents last-minute crisis by planning replenishment early.
+        </div>
+    `;
+}
+
+    /* SLIDE 6 — AI Decision Summary */
+    /* ---------------------------------------------------------
+   SLIDE 6 — Coordinator Agent Decision Making (index === 5)
+   AI chooses: Transport cheapest route OR Reorder if cheaper
+---------------------------------------------------------- */
+if (index === 6) {
+
+    // Show miniChart panel
+    $('transportChartWrap').style.display = 'block';
+
+    // Set title
+    const chartTitle = document.querySelector('#transportChartWrap > div:first-child');
+    chartTitle.style.display = "block";
+    chartTitle.innerHTML = `<b>🚚 Transport Cost & Reorder Decision</b>`;
+
+    const wrap = $('miniChart');
+    wrap.style.display = "grid";
+    wrap.style.gridTemplateColumns = "repeat(auto-fit, minmax(130px, 1fr))";
+    wrap.style.gap = "12px";
+    wrap.innerHTML = "";
+
+    /* -----------------------------
+       1) Dummy Transport Data
+       ----------------------------- */
+
+    // Dummy transport cost dataset (Sorted: low → high)
+    const options = [
+        { route: "WH1 → STORE1", cost: 40, type: "Transport" },
+        { route: "STORE2 → STORE1", cost: 55, type: "Transport" },
+        { route: "DC1 → STORE1", cost: 75, type: "Transport" }
+    ];
+
+    // Dummy reorder cost (slightly higher)
+    const reorderCost = 90;
+
+    // AI chooses lowest cost option
+    const best = options[0]; // WH1 → STORE1 @ 40
+
+    /* ----------------------------------------
+       2) Render Transport Options as Bars
+    ---------------------------------------- */
+
+    const maxCost = Math.max(...options.map(o => o.cost), reorderCost);
+    const colors = ['#16a34a', '#f59e0b', '#dc2626'];
+
+    options.forEach((opt, i) => {
+        const col = document.createElement("div");
+        col.style.padding = "10px";
+        col.style.borderRadius = "8px";
+        col.style.background = "#f1f5f9";
+        col.style.textAlign = "center";
+        col.style.boxShadow = "0 1px 4px rgba(0,0,0,0.08)";
+        col.style.fontSize = "12px";
+
+        const height = Math.max(15, Math.round((opt.cost / maxCost) * 70));
+
+        const bar = `
+            <div style="
+                height:${height}px;
+                width:40%;
+                margin:0 auto;
+                border-radius:6px;
+                background:${colors[i]};
+                margin-top:6px;
+            "></div>
+        `;
+
+        const highlight =
+            opt.cost === best.cost
+                ? `<div style="margin-top:6px; background:#dcfce7; padding:4px; border-radius:4px; color:#166534;">AI Choice ✔</div>`
+                : ``;
+
+        col.innerHTML = `
+            <b>${opt.route}</b><br>
+            Cost: <b>$${opt.cost}</b>
+            ${bar}
+            ${highlight}
+        `;
+
+        wrap.appendChild(col);
+    });
+
+    /* ----------------------------------------
+       3) Render Reorder Option
+    ---------------------------------------- */
+    const reorderDiv = document.createElement("div");
+    reorderDiv.style.padding = "10px";
+    reorderDiv.style.borderRadius = "8px";
+    reorderDiv.style.background = "#fff7ed";
+    reorderDiv.style.boxShadow = "0 1px 4px rgba(0,0,0,0.08)";
+    reorderDiv.style.fontSize = "12px";
+    reorderDiv.style.textAlign = "center";
+
+    reorderDiv.innerHTML = `
+        <b>Supplier Reorder</b><br>
+        Cost: <b>$${reorderCost}</b>
+        <div style="
+            height:${Math.round((reorderCost / maxCost) * 70)}px;
+            width:40%;
+            margin:6px auto 0;
+            border-radius:6px;
+            background:#7c3aed;
+        "></div>
+        ${reorderCost < best.cost 
+            ? `<div style="margin-top:6px; background:#e0e7ff; padding:4px; border-radius:4px; color:#3730a3;">AI Chooses Reorder ✔</div>`
+            : `<div style="margin-top:6px; color:#a16207;">More expensive than transport</div>`
+        }
+    `;
+
+    wrap.appendChild(reorderDiv);
+
+    /* ----------------------------------------
+       RIGHT SIDE PANEL (Explanation)
+    ---------------------------------------- */
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; font-size:14px; margin-bottom:6px;">
+            🤖 Coordinator Agent — Intelligent Decision Making
+        </div>
+
+        <div style="color:#334155; font-size:13px; line-height:1.45;">
+            The Coordinator Agent compares all <b>transport options</b> and 
+            <b>reorder cost</b> to find the most cost-effective solution.
+            <br><br>
+            ✔ Evaluates 3 transport routes<br>
+            ✔ Calculates cost and service impact<br>
+            ✔ Compares with Supplier Reorder cost<br>
+            ✔ Selects <b>cheapest + fastest</b> option instantly<br><br>
+
+            <div style="background:#dcfce7; border-left:4px solid #16a34a; padding:8px; border-radius:6px;">
+                <b>AI Decision:</b><br>
+                Transport from <b>${best.route}</b> (Cost: $${best.cost})<br>
+                → Cheaper than supplier reorder ($${reorderCost})
+            </div>
+
+            <br>
+            Humans take minutes or hours to compare costs.<br>
+            AI does this in <b>milliseconds</b> and executes the action.
+        </div>
+    `;
+}
+
+    /* SLIDE 7 — Final AI Summary */
+    /* ---------------------------------------------------------
+   SLIDE 7 — AI Cost Evaluation (index === 6)
+   AI evaluates: Transport Cost + Service Cost → Best Action
+---------------------------------------------------------- */
+/* ---------------------------------------------------------
+   SLIDE 7 — AI Cost Evaluation (index === 6)
+   SHOW INSIDE miniChart + place summary comment into demoNode
+---------------------------------------------------------- */
+if (index === 7) {
+
+    // Ensure miniChart area is visible
+    $('transportChartWrap').style.display = 'block';
+    $('transportChartWrap').style.width = "100%";     
+    $('transportChartWrap').style.flexDirection = "column"; 
+
+
+    // Hide Transport chart title + route labels in this slide
+    document.querySelector('#transportChartWrap > div:first-child').style.display = "none";
+    document.querySelectorAll('#transportChartWrap .muted')
+        .forEach(el => el.style.display = 'none');
+
+    const wrap = $('miniChart');
+    wrap.innerHTML = "";
+    wrap.style.display = "block";
+    wrap.style.flexDirection = "column";
+    wrap.style.textAlign = "center";
+    wrap.style.justifyContent = "center";
+    wrap.style.gap = "12px";
+    wrap.style.width = "100%";
+
+    /* --- Extract dashboard values --- */
+    const transport = parseFloat(($('transportCost')?.textContent || "0").replace(/[^0-9.]/g, "")) || 40;
+    const service   = parseFloat(($('serviceCost')?.textContent   || "0").replace(/[^0-9.]/g, "")) || 18;
+    const combined  = transport + service;
+
+    /* --- AI ICON REMOVED TO FIX BROKEN IMAGE --- */
+    // (Previously an <img> tag here — removed)
+
+    /* --- COST SUMMARY BOX --- */
+    const costBox = document.createElement("div");
+    costBox.style.background = "#f8fafc";
+    costBox.style.padding = "10px";
+    costBox.style.borderRadius = "10px";
+    costBox.style.width = "90%";
+    costBox.style.fontSize = "13px";
+    costBox.style.boxShadow = "0 2px 6px rgba(0,0,0,0.08)";
+    costBox.innerHTML = `
+        <div style="text-align:center; font-weight:700; margin-bottom:6px;">
+            🤖 AI Cost Evaluation
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <span>Transport Cost:</span><span><b>$${transport}</b></span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <span>Service Cost:</span><span><b>$${service}</b></span>
+        </div>
+        <hr style="margin:6px 0;">
+        <div style="display:flex; justify-content:space-between;">
+            <span>Total Combined Cost:</span><span><b>$${combined}</b></span>
+        </div>
+    `;
+    wrap.appendChild(costBox);
+
+    /* --- AI DECISION BOX --- */
+    const decisionBox = document.createElement("div");
+    decisionBox.style.background = "#dcfce7";
+    decisionBox.style.borderLeft = "4px solid #16a34a";
+    decisionBox.style.padding = "10px";
+    decisionBox.style.borderRadius = "10px";
+    decisionBox.style.fontSize = "13px";
+    decisionBox.style.color = "#064e3b";
+    decisionBox.style.width = "90%";
+    decisionBox.innerHTML = `
+        <b>AI Decision:</b><br>
+        AI instantly chooses the option with the <b>lowest combined cost</b>
+        ensuring fastest delivery and highest service levels.
+    `;
+    wrap.appendChild(decisionBox);
+
+    /* --- Summary inside Active Node --- */
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">🤖 AI Evaluation Summary</div>
+        <div style="font-size:13px; color:#334155;">
+            The AI examined all transport and service-level costs,<br>
+            calculated a total combined cost of <b>$${combined}</b>,<br>
+            and instantly selected the <b>lowest-cost option</b> to maintain
+            high service levels with minimum expense.
+        </div>
+    `;
+}
+
+/* ----------------------------------------------------
+      SLIDE 7 – Agentic AI vs Normal Gen-AI Comparison
+----------------------------------------------------- */
+if (index === 8) {
+
+    // Show minichart container
+    $('transportChartWrap').style.display = "block";
+
+    // Hide transport headings
+    const titleEl = document.querySelector('#transportChartWrap > div:first-child');
+    if (titleEl) titleEl.style.display = "none";
+
+    document.querySelectorAll('#transportChartWrap .muted')
+        .forEach(el => el.style.display = 'none');
+
+    $('transportChartWrap').style.overflowX = "hidden";
+
+    const wrap = $('miniChart');
+    wrap.innerHTML = "";
+
+    wrap.style.display = "block";
+    wrap.style.width = "100%";
+    wrap.style.maxWidth = "100%";
+    wrap.style.maxHeight = "430px";
+    wrap.style.overflowY = "auto";   // vertical scroll
+    wrap.style.overflowX = "hidden"; // prevent horizontal scroll
+    wrap.style.padding = "10px";
+    wrap.style.boxSizing = "border-box";
+    wrap.style.gap = "14px";
+
+    /* DATA WITH JUSTIFICATIONS */
+    const points = [
+        {
+            label: "Context Awareness",
+            genai: 20,
+            agentic: 85,
+            genaiJustification: "Normal Gen-AI operates in isolation, responding to individual prompts without understanding the broader supply chain context, historical patterns, or interdependencies between nodes. It lacks memory of previous interactions.",
+            agenticJustification: "Agentic AI maintains continuous awareness of the entire network state, remembers past decisions, understands node relationships, demand patterns, and seasonal trends. It connects data across multiple sources to make informed, context-rich decisions."
+        },
+        {
+            label: "Decision Quality",
+            genai: 35,
+            agentic: 90,
+            genaiJustification: "Gen-AI provides suggestions based on single-point analysis without validating against real-world constraints, cost implications, or service level impacts. Decisions are theoretical and require human verification.",
+            agenticJustification: "Agentic AI evaluates multiple variables simultaneously—transport costs, service levels, inventory positions, and capacity constraints—to make optimized, executable decisions. It validates feasibility before execution and learns from outcomes."
+        },
+        {
+            label: "Real-Time Adaptation",
+            genai: 10,
+            agentic: 95,
+            genaiJustification: "Normal Gen-AI requires manual intervention to process new data. It cannot monitor systems continuously or react to changing conditions automatically. Each query requires human initiation.",
+            agenticJustification: "Agentic AI operates 24/7, continuously monitoring inventory levels, demand fluctuations, and supply disruptions. It instantly adapts routing, reorder points, and resource allocation without human intervention, responding to events within milliseconds."
+        },
+        {
+            label: "Multi-Step Planning",
+            genai: 25,
+            agentic: 88,
+            genaiJustification: "Gen-AI handles single-step tasks effectively but struggles with complex, sequential workflows. It cannot plan multiple actions ahead, coordinate dependencies, or execute multi-stage operations autonomously.",
+            agenticJustification: "Agentic AI creates comprehensive action plans spanning multiple steps—forecasting shortages, evaluating transport options, coordinating node transfers, and scheduling replenishments—all while maintaining optimal sequencing and timing."
+        },
+        {
+            label: "End-to-End Automation",
+            genai: 15,
+            agentic: 92,
+            genaiJustification: "Gen-AI serves as a recommendation engine requiring human oversight at every step. It cannot execute actions, update systems, or close the loop. Automation is limited to generating suggestions.",
+            agenticJustification: "Agentic AI executes complete workflows autonomously—detecting issues, evaluating solutions, making decisions, triggering transfers, updating inventory records, and monitoring outcomes—achieving true closed-loop automation with minimal human intervention."
+        }
+    ];
+
+    const colorsGen = "#d1d5db";      // light gray
+    const colorsAgent = "#4f46e5";    // indigo
+
+    /* BUILD COMPARISON CARDS */
+    points.forEach(row => {
+
+        const card = document.createElement("div");
+        card.style.padding = "12px";
+        card.style.background = "#ffffff";
+        card.style.borderRadius = "10px";
+        card.style.boxShadow = "0 2px 6px rgba(0,0,0,0.08)";
+        card.style.border = "1px solid #e2e8f0";
+
+        // Title
+        const title = document.createElement("div");
+        title.textContent = row.label;
+        title.style.fontWeight = "800";
+        title.style.fontSize = "14px";
+        title.style.marginBottom = "10px";
+        title.style.color = "#0f172a";
+        title.style.borderBottom = "2px solid #e2e8f0";
+        title.style.paddingBottom = "6px";
+        card.appendChild(title);
+
+        // GEN AI Section
+        const genSection = document.createElement("div");
+        genSection.style.marginBottom = "12px";
+        genSection.style.padding = "8px";
+        genSection.style.background = "#f8fafc";
+        genSection.style.borderRadius = "6px";
+
+        const genHeader = document.createElement("div");
+        genHeader.style.display = "flex";
+        genHeader.style.justifyContent = "space-between";
+        genHeader.style.alignItems = "center";
+        genHeader.style.marginBottom = "6px";
+
+        const genLabel = document.createElement("div");
+        genLabel.innerHTML = `<span style="font-weight:700; color:#6b7280;">Normal Gen-AI</span>`;
+        genLabel.style.fontSize = "12px";
+
+        const genPercent = document.createElement("div");
+        genPercent.textContent = row.genai + "%";
+        genPercent.style.fontWeight = "700";
+        genPercent.style.fontSize = "13px";
+        genPercent.style.color = "#6b7280";
+
+        genHeader.appendChild(genLabel);
+        genHeader.appendChild(genPercent);
+
+        const genBar = document.createElement("div");
+        genBar.style.height = "5px";
+        genBar.style.borderRadius = "4px";
+        genBar.style.background = colorsGen;
+        genBar.style.width = row.genai + "%";
+        genBar.style.marginBottom = "8px";
+
+        const genText = document.createElement("div");
+        genText.textContent = row.genaiJustification;
+        genText.style.fontSize = "11px";
+        genText.style.lineHeight = "1.5";
+        genText.style.color = "#475569";
+
+        genSection.appendChild(genHeader);
+        genSection.appendChild(genBar);
+        genSection.appendChild(genText);
+
+        // AGENTIC AI Section
+        const agentSection = document.createElement("div");
+        agentSection.style.padding = "8px";
+        agentSection.style.background = "#eef2ff";
+        agentSection.style.borderRadius = "6px";
+
+        const agentHeader = document.createElement("div");
+        agentHeader.style.display = "flex";
+        agentHeader.style.justifyContent = "space-between";
+        agentHeader.style.alignItems = "center";
+        agentHeader.style.marginBottom = "6px";
+
+        const agentLabel = document.createElement("div");
+        agentLabel.innerHTML = `<span style="font-weight:700; color:#4f46e5;">Agentic AI</span>`;
+        agentLabel.style.fontSize = "12px";
+
+        const agentPercent = document.createElement("div");
+        agentPercent.textContent = row.agentic + "%";
+        agentPercent.style.fontWeight = "700";
+        agentPercent.style.fontSize = "13px";
+        agentPercent.style.color = "#4f46e5";
+
+        agentHeader.appendChild(agentLabel);
+        agentHeader.appendChild(agentPercent);
+
+        const agentBar = document.createElement("div");
+        agentBar.style.height = "5px";
+        agentBar.style.borderRadius = "4px";
+        agentBar.style.background = colorsAgent;
+        agentBar.style.width = row.agentic + "%";
+        agentBar.style.marginBottom = "8px";
+
+        const agentText = document.createElement("div");
+        agentText.textContent = row.agenticJustification;
+        agentText.style.fontSize = "11px";
+        agentText.style.lineHeight = "1.5";
+        agentText.style.color = "#475569";
+
+        agentSection.appendChild(agentHeader);
+        agentSection.appendChild(agentBar);
+        agentSection.appendChild(agentText);
+
+        card.appendChild(genSection);
+        card.appendChild(agentSection);
+        wrap.appendChild(card);
+    });
+
+    /* ---- Write caption in Active Node panel ---- */
+    $('demoNode').innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">🤖 Agentic AI Advantage</div>
+        <div style="font-size:13px; color:#334155; line-height:1.6;">
+            Agentic AI transforms supply chain operations through <b>autonomous intelligence</b> 
+            that goes far beyond simple text generation. Unlike normal Gen-AI which provides 
+            suggestions, Agentic AI <b>perceives, reasons, decides, and acts</b>—creating a 
+            self-optimizing system that operates continuously without human intervention.
+            <br><br>
+            The comparison shows how Agentic AI achieves <b>85-95% effectiveness</b> across 
+            critical dimensions while normal Gen-AI remains limited to <b>10-35% effectiveness</b>, 
+            requiring constant human oversight and manual execution.
+        </div>
+    `;
+}
+
+    // Highlight dashboard element
+    const target = slide.highlight === "nodes" ? $('nodes') : $(slide.highlight);
+    if (target) {
+        target.classList.add("glow-highlight");
+        try { target.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+    }
+
+    // Overlay small cost indicators
+    $('overlayTransportCost').textContent = $('transportCost').textContent || '$0';
+    $('overlayServiceCost').textContent = $('serviceCost').textContent || '$0';
+
+    // Ensure live metrics are updated for overlay
+    updateLiveMetrics(true);
+}
+
+function nextSlide(){ if(currentSlide < stepSlides.length-1){ currentSlide++; showSlide(currentSlide);} }
+function prevSlide(){ if(currentSlide > 0){ currentSlide--; showSlide(currentSlide);} }
+
+/* --- transport comparison mini chart (single definitive implementation) --- */
+function renderTransportChart(costs){
+    const wrap = $('miniChart');
+    if(!wrap) return;
+    wrap.innerHTML = '';
+    if(!costs || costs.length === 0){
+        // placeholder empty bars
+        for(let i=0;i<3;i++){
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            bar.style.height = '6px';
+            bar.style.background = '#c7d2fe';
+            wrap.appendChild(bar);
+        }
+        return;
+    }
+    const max = Math.max(...costs,1);
+    const colors = ['#4f46e5','#1d4ed8','#db2777'];
+    costs.forEach((c,idx)=>{
+        const pct = Math.max(6, Math.round((c/max) * 84)); // px height
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = '6px';
+        bar.style.background = colors[idx%colors.length];
+        bar.style.borderRadius = '8px';
+        bar.style.display = 'flex';
+        bar.style.flexDirection = 'column';
+        // label inside top (cost)
+        const label = document.createElement('div');
+        label.style.fontSize = '11px';
+        label.style.marginBottom = '6px';
+        label.style.opacity = '0.95';
+        label.textContent = fmtMoney(c);
+        label.style.transform = 'translateY(-6px)';
+        label.style.fontWeight = '700';
+        label.style.pointerEvents = 'none';
+        // wrapper: we will set height via timeout to animate
+        bar.appendChild(label);
+        wrap.appendChild(bar);
+        // animate
+        setTimeout(()=>{ bar.style.height = pct + 'px'; }, 80 + idx*80);
+    });
+}
+
+/* --- highlight node by ID (glow-effect) --- */
+function highlightNode(nodeId){
+    document.querySelectorAll('.glow-effect').forEach(e=>e.classList.remove('glow-effect'));
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if(el){
+        el.classList.add('glow-effect');
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+    }
+}
+
+/* --- simulate transaction (simple demo) --- */
+async function simulateTransaction(){
+    setStatus('Simulating transaction...', 'yellow');
+    updateDemoOverlay('Executing transaction','Moving inventory between nodes', 'Transaction initiated');
+    try {
+        const res = await fetch(`${API}/nodes/`);
+        const data = await res.json();
+        const nodes = data.results || data;
+        if(!nodes || nodes.length < 2) { setStatus('Not enough nodes', 'red'); return; }
+        const from = nodes[Math.floor(Math.random()*nodes.length)];
+        const toCandidates = nodes.filter(n=>n.id !== from.id);
+        const to = toCandidates[Math.floor(Math.random()*toCandidates.length)];
+        const amount = Math.floor(Math.random()*500)+100;
+
+        // optimistic UI: ping PATCH endpoints
+        await fetch(`${API}/nodes/${from.id}/`, {
+            method:'PATCH', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ current_inventory: Math.max(0, from.current_inventory - amount)})
+        });
+        setTimeout(()=>highlightNode(from.id), 50);
+        setTimeout(async ()=>{
+            await fetch(`${API}/nodes/${to.id}/`, {
+                method:'PATCH', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ current_inventory: Math.min(to.current_inventory + amount, to.inventory_capacity)})
+            });
+            highlightNode(to.id);
+        }, 850);
+
+        transactionCount++;
+        $('totalTransactions').textContent = transactionCount;
+        addActivity('TransportationAgent', `Moved ${amount} units: ${from.code} → ${to.code}`, 'HIGH');
+        updateDemoOverlay(`Transaction complete: ${amount} units moved`, `<div style="font-family:monospace; font-size:12px;">FROM: ${from.code} (${from.current_inventory} → ${Math.max(0, from.current_inventory - amount)})<br>TO: ${to.code} (${to.current_inventory} → ${Math.min(to.current_inventory + amount, to.inventory_capacity)})</div>`);
+        setStatus('✓ Transaction complete', 'green');
+        setTimeout(loadData, 600);
+    } catch(err){
+        console.error(err);
+        setStatus('Transaction failed','red');
+    }
+}
+
+/* --- run agent cycle (calls backend, reads totals & alerts) --- */
+async function runAgentCycle(){
+    setStatus('Running agent cycle...','purple');
+    updateDemoOverlay('Agent cycle running...', 'AI agents analyzing network', 'Agent cycle started');
+
+    try {
+        const res = await fetch(`${API}/decisions/run_agent_cycle/`, {
+            method:'POST', headers:{'Content-Type':'application/json'}
+        });
+        const payload = await res.json();
+
+        if(payload.status !== 'success'){
+            setStatus('Agent cycle failed','red');
+            console.error('run_agent_cycle failed', payload);
+            return;
+        }
+
+        const results = payload.results || {};
+        // update metrics for costs
+        const totTransport = results.total_transport_cost || 0;
+        const totService = results.total_service_level_cost || 0;
+        $('transportCost').textContent = fmtMoney(totTransport);
+        $('serviceCost').textContent = fmtMoney(totService);
+        $('overlayTransportCost').textContent = fmtMoney(totTransport);
+        $('overlayServiceCost').textContent = fmtMoney(totService);
+        updateLiveMetrics(true);
+
+        // update alerts count and list based on decisions
+        const decisions = payload.decisions || [];
+        const alerts = decisions.filter(d => d.decision_type === 'SERVICE_ALERT' || d.type === 'SERVICE_ALERT');
+        const alertCount = alerts.length;
+        $('alerts').textContent = alertCount;
+        $('alertsCountBadge').textContent = alertCount;
+
+        // prepare alerts list content
+        const alertsList = $('alertsList');
+        alertsList.innerHTML = '';
+        if(alerts.length === 0 && (results.logs || []).length){
+            (results.logs || []).forEach(log => {
+                if(log.toLowerCase().includes('alert') || log.toLowerCase().includes('[alert]')){
+                    const item = document.createElement('div');
+                    item.className = 'alert-item alert-pulse';
+                    item.innerHTML = `<div style="font-weight:700;">System Alert</div><div class="muted" style="margin-top:6px;">${log}</div>`;
+                    alertsList.appendChild(item);
+                }
+            });
+        } else {
+            alerts.forEach(a=>{
+                const item = document.createElement('div');
+                item.className = 'alert-item alert-pulse';
+                const nodeName = a.destination_node ? (a.destination_node.name || a.destination_node) : (a.source_node ? a.source_node.name : 'Unknown');
+                alerts.forEach(a => {
+    const item = document.createElement('div');
+    item.className = 'alert-item alert-pulse';
+
+    // SAFELY extract node name
+    let nodeName = "Unknown";
+
+    if (a.destination_node) {
+        if (typeof a.destination_node === "object") {
+            nodeName = a.destination_node.name || "Unknown";
+        } else {
+            // destination_node is a string ID → try to map it from DOM
+            const el = document.querySelector(`[data-node-id="${a.destination_node}"]`);
+            if (el) {
+                const title = el.querySelector("div > div");
+                if (title) nodeName = title.innerText.trim();
+            }
+        }
+    }
+
+    item.innerHTML = `
+        <div style="font-weight:800; color:#b91c1c;">
+            ${a.urgency || 'CRITICAL'} - ${a.agent_name || a.agent}
+        </div>
+        <div class="muted" style="margin-top:6px;">
+            Node: <b>${nodeName}</b><br>
+            ${a.reason || a.message || ''}
+        </div>
+    `;
+
+    alertsList.appendChild(item);
+});
+
+                alertsList.appendChild(item);
+            });
+        }
+
+        // forecasting & planning: compute simple forecast heuristics (client-side fallback)
+        await computeForecastAndPlan();
+
+        addActivity('CoordinatorAgent', `Cycle: inv=${results.inventory_decisions||0} trans=${results.transport_decisions||0} alerts=${results.service_alerts||0}`, 'MEDIUM');
+        updateDemoOverlay('Agent cycle completed', `<div style="font-size:12px;">Inventory Decisions: ${results.inventory_decisions||0}<br>Transport Decisions: ${results.transport_decisions||0}<br>Service Alerts: ${results.service_alerts||0}</div>`, `Agent cycle done`);
+        setStatus('✓ Agent cycle complete','green');
+        setTimeout(loadData, 500);
+    } catch(err){
+        console.error('runAgentCycle error', err);
+        setStatus('Agent cycle failed','red');
+    }
+}
+
+/* --- compute forecast & simple plan (client-side heuristic) --- */
+async function computeForecastAndPlan(){
+    try {
+        const nodeEls = document.querySelectorAll('[data-node-id]');
+        let forecastHtml = '';
+        let planHtml = '';
+        let anyCritical = false;
+        nodeEls.forEach(el=>{
+            const numMatch = el.innerText.match(/([\d,]{1,})/);
+            const currentInv = numMatch ? parseInt(numMatch[1].replace(/,/g,'')) : 0;
+            const capMatch = el.innerText.match(/\/\s*([\d,]{1,})/);
+            const cap = capMatch ? parseInt(capMatch[1].replace(/,/g,'')) : 1;
+            const typeText = el.querySelector('.muted') ? el.querySelector('.muted').innerText : '';
+            let avgDemand = 100;
+            if(typeText && typeText.toUpperCase().includes('STORE')) avgDemand = 200;
+            else if(typeText && typeText.toUpperCase().includes('DC')) avgDemand = 120;
+            else if(typeText && typeText.toUpperCase().includes('WH')) avgDemand = 120;
+            const days = Math.ceil(currentInv / Math.max(1, avgDemand));
+            if(days <= 2){
+                anyCritical = true;
+                forecastHtml += `<div style="font-weight:700; margin-bottom:6px;">${el.querySelector('div') ? el.querySelector('div').innerText.trim() : 'Node'} — stockout in ~${days} cycles</div>`;
+                planHtml += `<div style="margin-bottom:6px;">Plan: Consider transfer or reorder to keep service level. Recommended qty: ${Math.max(50, Math.round(cap*0.15))}</div>`;
+            }
+        });
+        if(!forecastHtml) forecastHtml = `<div>No imminent shortages detected (client-side forecast)</div>`;
+        $('forecastText').innerHTML = forecastHtml;
+        $('planText').innerHTML = planHtml;
+        if(anyCritical){
+            $('alertsPanel').style.border = '1px solid rgba(239,68,68,0.14)';
+            $('alertsPanel').style.boxShadow = '0 18px 48px rgba(239,68,68,0.08)';
+        } else {
+            $('alertsPanel').style.border = '1px solid rgba(8,145,255,0.06)';
+            $('alertsPanel').style.boxShadow = '0 12px 40px rgba(3,7,18,0.06)';
+        }
+    } catch(e){
+        console.error('forecast error',e);
+    }
+}
+
+/* --- update overlay small status blocks --- */
+function updateDemoOverlay(status, nodeInfo, activity){
+    if($('demoStatus') && status) $('demoStatus').textContent = status;
+    if($('demoNode') && nodeInfo) $('demoNode').innerHTML = nodeInfo;
+    if(activity && $('demoActivity')){
+        const time = new Date().toLocaleTimeString();
+        $('demoActivity').innerHTML = `<div style="font-weight:700">${time}</div><div class="muted">${activity}</div>` + $('demoActivity').innerHTML;
+        const actEl = $('demoActivity');
+        while(actEl.children.length > 6) actEl.removeChild(actEl.lastChild);
+    }
+}
+
+/* --- Add activity to stream --- */
+function addActivity(agent, action, urgency='MEDIUM'){
+    const stream = $('activityStream');
+    const time = new Date().toLocaleTimeString();
+    const item = document.createElement('div');
+    item.style.borderLeft = '4px solid rgba(2,6,23,0.06)';
+    item.style.padding = '8px';
+    item.style.marginBottom = '8px';
+    item.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <div style="font-size:18px;">🤖</div>
+            <div>
+                <div style="font-weight:800">${agent}</div>
+                <div class="muted" style="font-size:13px;">${action}</div>
+            </div>
+        </div>
+        <div class="muted" style="font-size:12px;">${time}</div>
+    </div>`;
+    stream.insertBefore(item, stream.firstChild);
+    while(stream.children.length > 12) stream.removeChild(stream.lastChild);
+}
+
+/* --- live mode (auto simulate transactions & occasionally run agent cycle) --- */
+async function startLiveMode(){
+    if(isLiveMode) return;
+    isLiveMode = true;
+    setStatus('🔴 LIVE MODE ACTIVE','red');
+    openOverlay();
+    await loadData();
+    liveInterval = setInterval(async ()=>{
+        if(!isLiveMode) return;
+        await simulateTransaction();
+        if(Math.random() > 0.7) await runAgentCycle();
+    }, 3200);
+}
+function stopLiveMode(){ isLiveMode = false; if(liveInterval) clearInterval(liveInterval); setStatus('LIVE Mode stopped','gray'); }
+
+/* --- initialize UI & first data load --- */
+document.addEventListener('DOMContentLoaded', ()=>{
+    loadData();
+    updateTimestamp();
+    // initial chart empty
+    renderTransportChart(null);
+    // hide overlay initially
+    $('demoOverlay').style.display = 'none';
+    // show alerts panel hidden until demo/open but we'll keep it visible per option A only when overlay opened
+    $('alertsPanel').style.display = 'none';
+});
+
+/* --- small keyboard helpers for demo testing --- */
+document.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowRight') nextSlide();
+    if(e.key === 'ArrowLeft') prevSlide();
+});
+
+/* --- Active Alert content update --- */
+function updateActiveAlert(count) {
+    const container = document.getElementById('activeAlertContainer');
+    if (!container) return;
+
+    if (count > 0) {
+        const alertHtml = `
+            <div class="p-4 bg-red-900 border-l-4 border-red-500 shadow-xl rounded-lg flex items-center justify-between transition-opacity duration-300">
+                <div class="flex items-center">
+                    <svg class="w-8 h-8 text-red-400 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <div>
+                        <div class="text-xl font-bold text-red-300">CRITICAL SERVICE ALERT</div>
+                        <div class="text-sm text-gray-300">Detected <span class="text-red-400 font-semibold">${count}</span> unresolved service disruptions. Immediate agent action is recommended.</div>
+                    </div>
+                </div>
+                <button onclick="runAgentCycle()" class="px-3 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-semibold transition duration-200 shadow-md active:scale-95">
+                    Trigger Agent Run
+                </button>
+            </div>
+        `;
+        container.innerHTML = alertHtml;
+    } else {
+        container.innerHTML = `
+            <div class="p-4 bg-gray-700/50 border-l-4 border-green-500 rounded-lg text-gray-300 text-sm font-medium flex items-center transition-opacity duration-300">
+                <svg class="w-6 h-6 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                No active service alerts. System status is <span class="text-green-400 ml-1 font-semibold">NOMINAL</span>.
+            </div>
+        `;
+    }
+}
+
+/* --- Make alerts panel draggable (safe: only attach after DOM ready) --- */
+(function() {
+    function initDraggable() {
+        const panel = document.getElementById("alertsPanel");
+        if(!panel) return;
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        const head = panel.querySelector(".head") || panel;
+        head.onmousedown = dragMouseDown;
+
+        function dragMouseDown(e) {
+            e = e || window.event;
+            e.preventDefault();
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
+        }
+        function elementDrag(e) {
+            e = e || window.event;
+            e.preventDefault();
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            panel.style.top = (panel.offsetTop - pos2) + "px";
+            panel.style.left = (panel.offsetLeft - pos1) + "px";
+        }
+        function closeDragElement() {
+            document.onmouseup = null;
+            document.onmousemove = null;
+        }
+    }
+    // init when DOM ready
+    document.addEventListener('DOMContentLoaded', initDraggable);
+})();
+
+/* --- Live Metrics renderer (keeps labels aligned and responsive) --- */
+function updateLiveMetrics(force = false) {
+    const metricsBox = document.getElementById("demoMetrics");
+    if (!metricsBox) return;
+
+    // read dashboard values
+    const invText = document.getElementById("totalInventory")?.innerText || "";
+    const transText = document.getElementById("transportCost")?.innerText || "";
+    const servText = document.getElementById("serviceCost")?.innerText || "";
+
+    // if values are still empty in first render → retry later
+    if ((!invText || invText === "0") && !force) {
+        setTimeout(() => updateLiveMetrics(true), 500);
+        return;
+    }
+
+    let inv = parseInt(invText.replace(/[^0-9]/g, "")) || 0;
+    let trans = parseFloat(transText.replace(/[^0-9.]/g, "")) || 0;
+    let serv = parseFloat(servText.replace(/[^0-9.]/g, "")) || 0;
+
+    // normalize values to visible band (bars heights)
+    const max = Math.max(inv, trans, serv, 1);
+    const scale = v => Math.max(6, Math.round((v / max) * 70));
+
+    // Build live metrics HTML using fixed-width columns so labels move with bars
+    metricsBox.innerHTML = `
+        <div class="live-metrics-wrap">
+            <div class="live-metric-bars">
+                <div class="bar-col">
+                    <div id="invBar" class="bar" style="height:${scale(inv)}px; background:#2563eb;"></div>
+                </div>
+                <div class="bar-col">
+                    <div id="transBar" class="bar" style="height:${scale(trans)}px; background:#4f46e5;"></div>
+                </div>
+                <div class="bar-col">
+                    <div id="serviceBar" class="bar" style="height:${scale(serv)}px; background:#db2777;"></div>
+                </div>
+            </div>
+            <div class="live-metric-labels" style="margin-top:6px;">
+                <span>Inv</span><span>Trans</span><span>Service</span>
+            </div>
+        </div>
+    `;
+}
+
+function getNodeName(nodeId) {
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!el) return "Unknown Node";
+
+    const nameEl = el.querySelector("div");
+    return nameEl ? nameEl.innerText.trim() : "Node";
+}
+
+</script>
+</body>
+</html>

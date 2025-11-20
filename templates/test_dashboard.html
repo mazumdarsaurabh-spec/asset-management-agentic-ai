@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supply Chain Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .flash-green {
+            animation: flashGreen 1s ease-in-out;
+        }
+        @keyframes flashGreen {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: #86efac; }
+        }
+        .change-indicator {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .increase { color: #16a34a; }
+        .decrease { color: #dc2626; }
+    </style>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Supply Chain Dashboard - Live Updates</h1>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Controls</h2>
+            <div class="flex gap-3 mb-4 flex-wrap">
+                <button onclick="initNetwork()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                    Initialize Network
+                </button>
+                <button onclick="runCycle()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                    Run Agent Cycle
+                </button>
+                <button onclick="simulateChanges()" class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
+                    Simulate Changes (Test)
+                </button>
+                <button onclick="loadData()" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+                    Refresh Data
+                </button>
+                <button onclick="toggleAutoRefresh()" id="autoRefreshBtn" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">
+                    Enable Auto-Refresh (5s)
+                </button>
+            </div>
+            <div class="flex items-center gap-2">
+                <div id="statusDot" class="w-3 h-3 rounded-full bg-green-500"></div>
+                <div id="status" class="text-sm"></div>
+            </div>
+            <div class="flex items-center gap-4 mt-2">
+                <div id="lastUpdate" class="text-xs text-gray-500"></div>
+                <div id="changeCount" class="text-xs font-bold text-blue-600"></div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Network Summary</h2>
+            <div id="summary" class="text-gray-600">Loading...</div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-xl font-bold mb-4">Network Nodes <span id="nodeCount" class="text-sm text-gray-500"></span></h2>
+            <div id="nodes" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold mb-4">Recent Decisions <span id="decisionCount" class="text-sm text-gray-500"></span></h2>
+            <div id="decisions" class="space-y-2 max-h-96 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        let autoRefreshInterval = null;
+        let isAutoRefreshEnabled = true;
+        let previousData = {
+            nodes: [],
+            decisions: [],
+            summary: null
+        };
+        let changeCounter = 0;
+        
+        function setStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            const statusDot = document.getElementById('statusDot');
+            status.textContent = message;
+            status.className = `text-sm p-3 rounded ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            statusDot.className = `w-3 h-3 rounded-full ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+            
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = `Last updated: ${now.toLocaleTimeString()}`;
+        }
+        
+        function detectChanges(newNodes, newDecisions) {
+            let changes = 0;
+            
+            // Check node changes
+            newNodes.forEach(newNode => {
+                const oldNode = previousData.nodes.find(n => n.id === newNode.id);
+                if (oldNode && oldNode.current_inventory !== newNode.current_inventory) {
+                    changes++;
+                }
+            });
+            
+            // Check new decisions
+            if (newDecisions.length > previousData.decisions.length) {
+                changes += (newDecisions.length - previousData.decisions.length);
+            }
+            
+            changeCounter += changes;
+            document.getElementById('changeCount').textContent = 
+                changes > 0 ? `🔄 ${changes} changes detected (Total: ${changeCounter})` : '';
+            
+            return changes;
+        }
+        
+        function toggleAutoRefresh() {
+            isAutoRefreshEnabled = !isAutoRefreshEnabled;
+            const btn = document.getElementById('autoRefreshBtn');
+            
+            if (isAutoRefreshEnabled) {
+                btn.textContent = 'Disable Auto-Refresh (5s)';
+                btn.className = 'px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700';
+                autoRefreshInterval = setInterval(() => {
+                    console.log('Auto-refreshing...');
+                    loadData();
+                }, 5000);
+                setStatus('Auto-refresh enabled (every 5 seconds)');
+            } else {
+                btn.textContent = 'Enable Auto-Refresh (5s)';
+                btn.className = 'px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400';
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+                setStatus('Auto-refresh disabled');
+            }
+        }
+        
+        async function initNetwork() {
+            setStatus('Initializing network...');
+            document.getElementById('statusDot').className = 'w-3 h-3 rounded-full bg-yellow-500 pulse';
+            
+            try {
+                const response = await fetch(`${API_BASE}/nodes/initialize_network/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                console.log('Init response:', data);
+                
+                if (data.status === 'success') {
+                    setStatus(`✓ ${data.message}`);
+                    setTimeout(() => loadData(), 500);
+                } else {
+                    throw new Error(data.message || 'Failed to initialize');
+                }
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        async function runCycle() {
+            setStatus('Running agent cycle...');
+            document.getElementById('statusDot').className = 'w-3 h-3 rounded-full bg-yellow-500 pulse';
+            
+            try {
+                const response = await fetch(`${API_BASE}/decisions/run_agent_cycle/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                console.log('Cycle response:', data);
+                
+                if (data.status === 'success') {
+                    const r = data.results;
+                    setStatus(`✓ Agent Cycle Complete! Inv: ${r.inventory_decisions}, Trans: ${r.transport_decisions}, Alerts: ${r.service_alerts}`);
+                    setTimeout(() => loadData(), 500);
+                } else {
+                    throw new Error(data.message || 'Cycle failed');
+                }
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        async function simulateChanges() {
+            setStatus('Simulating inventory changes...');
+            try {
+                const response = await fetch(`${API_BASE}/nodes/`);
+                const data = await response.json();
+                const nodes = data.results || data;
+                
+                let updated = 0;
+                for (let i = 0; i < Math.min(3, nodes.length); i++) {
+                    const node = nodes[i];
+                    const changeAmount = Math.floor(Math.random() * 1000) - 500;
+                    const newInventory = Math.max(0, Math.min(node.current_inventory + changeAmount, node.inventory_capacity));
+                    
+                    await fetch(`${API_BASE}/nodes/${node.id}/`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ current_inventory: newInventory })
+                    });
+                    updated++;
+                }
+                
+                setStatus(`✓ Simulated ${updated} inventory changes!`);
+                setTimeout(() => loadData(), 500);
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        async function loadData() {
+            console.log('Loading data...');
+            document.getElementById('statusDot').className = 'w-3 h-3 rounded-full bg-blue-500 pulse';
+            
+            try {
+                const [summaryRes, nodesRes, decisionsRes] = await Promise.all([
+                    fetch(`${API_BASE}/nodes/network_summary/`),
+                    fetch(`${API_BASE}/nodes/`),
+                    fetch(`${API_BASE}/decisions/`)
+                ]);
+                
+                const summary = await summaryRes.json();
+                const nodesData = await nodesRes.json();
+                const decisionsData = await decisionsRes.json();
+                
+                const nodes = nodesData.results || nodesData;
+                const decisions = (decisionsData.results || decisionsData).slice(0, 15);
+                
+                // Detect changes
+                const changesDetected = detectChanges(nodes, decisions);
+                
+                // Store current data
+                previousData = { nodes, decisions, summary };
+                
+                // Update counts
+                document.getElementById('nodeCount').textContent = `(${nodes.length} nodes)`;
+                document.getElementById('decisionCount').textContent = `(${decisions.length} decisions)`;
+                
+                // Update summary
+                document.getElementById('summary').innerHTML = `
+                    <div class="grid grid-cols-4 gap-6">
+                        <div class="text-center p-4 bg-blue-50 rounded-lg ${changesDetected > 0 ? 'flash-green' : ''}">
+                            <div class="text-3xl font-bold text-blue-600">${summary.total_nodes}</div>
+                            <div class="text-sm text-gray-600">Total Nodes</div>
+                        </div>
+                        <div class="text-center p-4 bg-purple-50 rounded-lg ${changesDetected > 0 ? 'flash-green' : ''}">
+                            <div class="text-3xl font-bold text-purple-600">${summary.total_inventory.toLocaleString()}</div>
+                            <div class="text-sm text-gray-600">Total Inventory</div>
+                        </div>
+                        <div class="text-center p-4 bg-green-50 rounded-lg">
+                            <div class="text-3xl font-bold text-green-600">${summary.utilization_rate.toFixed(1)}%</div>
+                            <div class="text-sm text-gray-600">Utilization</div>
+                        </div>
+                        <div class="text-center p-4 bg-orange-50 rounded-lg">
+                            <div class="text-3xl font-bold text-orange-600">${decisions.filter(d => d.urgency === 'HIGH' || d.urgency === 'CRITICAL').length}</div>
+                            <div class="text-sm text-gray-600">Critical Alerts</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Update nodes with change indicators
+                document.getElementById('nodes').innerHTML = nodes.map(node => {
+                    const oldNode = previousData.nodes.find(n => n.id === node.id);
+                    const inventoryChanged = oldNode && oldNode.current_inventory !== node.current_inventory;
+                    const diff = oldNode ? node.current_inventory - oldNode.current_inventory : 0;
+                    
+                    const ratio = node.current_inventory / node.inventory_capacity;
+                    const percentage = (ratio * 100).toFixed(1);
+                    let colorClass = 'bg-red-500';
+                    let textColor = 'text-red-600';
+                    
+                    if (ratio >= 0.6) {
+                        colorClass = 'bg-green-500';
+                        textColor = 'text-green-600';
+                    } else if (ratio >= 0.3) {
+                        colorClass = 'bg-yellow-500';
+                        textColor = 'text-yellow-600';
+                    }
+                    
+                    const changeIndicator = inventoryChanged ? 
+                        `<span class="change-indicator ${diff > 0 ? 'increase' : 'decrease'}">${diff > 0 ? '▲' : '▼'} ${Math.abs(diff).toLocaleString()}</span>` : '';
+                    
+                    return `
+                        <div class="border rounded-lg p-4 hover:shadow-lg transition ${inventoryChanged ? 'flash-green' : ''}">
+                            <div class="flex justify-between items-start mb-3">
+                                <div>
+                                    <div class="font-bold text-lg">${node.name}</div>
+                                    <div class="text-xs text-gray-500 uppercase">${node.node_type}</div>
+                                </div>
+                                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-mono">${node.code}</span>
+                            </div>
+                            <div class="text-sm text-gray-600 mb-2">
+                                <span class="font-mono font-bold">${node.current_inventory.toLocaleString()}</span> / 
+                                <span class="font-mono">${node.inventory_capacity.toLocaleString()}</span>
+                                ${changeIndicator}
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
+                                <div class="${colorClass} h-3 rounded-full transition-all duration-500" style="width: ${percentage}%"></div>
+                            </div>
+                            <div class="text-right">
+                                <span class="${textColor} font-semibold text-sm">${percentage}%</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // Update decisions
+                if (decisions.length === 0) {
+                    document.getElementById('decisions').innerHTML = '<p class="text-gray-500 text-center py-8">No decisions yet. Run an agent cycle to see decisions.</p>';
+                } else {
+                    document.getElementById('decisions').innerHTML = decisions.map(d => {
+                        let borderColor = 'border-blue-500';
+                        let badgeColor = 'bg-blue-100 text-blue-700';
+                        
+                        if (d.urgency === 'CRITICAL') {
+                            borderColor = 'border-red-500';
+                            badgeColor = 'bg-red-600 text-white';
+                        } else if (d.urgency === 'HIGH') {
+                            borderColor = 'border-orange-500';
+                            badgeColor = 'bg-orange-600 text-white';
+                        } else if (d.urgency === 'MEDIUM') {
+                            borderColor = 'border-yellow-500';
+                            badgeColor = 'bg-yellow-600 text-white';
+                        } else if (d.urgency === 'LOW') {
+                            borderColor = 'border-green-500';
+                            badgeColor = 'bg-green-600 text-white';
+                        }
+                        
+                        return `
+                            <div class="border-l-4 ${borderColor} bg-gray-50 p-4 rounded hover:bg-gray-100 transition">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-2 flex-wrap">
+                                            <span class="font-bold text-gray-800">${d.agent_name}</span>
+                                            <span class="text-gray-400">•</span>
+                                            <span class="text-sm text-gray-600">${d.decision_type}</span>
+                                            <span class="text-xs px-2 py-1 rounded ${badgeColor}">${d.urgency}</span>
+                                        </div>
+                                        <p class="text-sm text-gray-700">${d.reason}</p>
+                                        ${d.quantity ? `<p class="text-xs text-gray-500 mt-1">Quantity: ${d.quantity.toLocaleString()} units</p>` : ''}
+                                        ${d.estimated_cost ? `<p class="text-xs text-gray-500">Est. Cost: $${d.estimated_cost.toFixed(2)}</p>` : ''}
+                                    </div>
+                                    <span class="text-xs text-gray-400 ml-4 whitespace-nowrap">${new Date(d.created_at).toLocaleTimeString()}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                if (changesDetected > 0) {
+                    setStatus(`✓ Data loaded - ${changesDetected} changes detected!`);
+                } else {
+                    setStatus('✓ Data loaded successfully');
+                }
+                
+            } catch (error) {
+                setStatus(`Error loading data: ${error.message}`, true);
+                console.error(error);
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', () => {
+    console.log('Page loaded, fetching initial data...');
+    
+    // Load data immediately
+    loadData();
+    
+    // Enable auto-refresh by default
+    setTimeout(() => {
+        if (!isAutoRefreshEnabled) {
+            toggleAutoRefresh();
+        }
+    }, 1000);
+    
+    console.log('Dashboard initialized with auto-refresh');
+});
+    </script>
+</body>
+</html>
