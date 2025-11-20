@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Dashboard</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .error-banner {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c33;
+            padding: 12px;
+            margin: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        // Icons (same as before)
+        const Package = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+        );
+
+        const Activity = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+        );
+
+        const Play = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+        );
+
+        const Pause = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+        );
+
+        const RefreshCw = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+
+        const Settings = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6"></path>
+            </svg>
+        );
+
+        const TrendingUp = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+            </svg>
+        );
+
+        const AlertCircle = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+        );
+
+        const BarChart3 = ({ size = 24, className = "" }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M3 3v18h18"></path>
+                <path d="M18 17V9"></path>
+                <path d="M13 17V5"></path>
+                <path d="M8 17v-3"></path>
+            </svg>
+        );
+
+        const API_BASE_URL = window.location.origin + '/api';
+
+        const Dashboard = () => {
+            const [nodes, setNodes] = useState([]);
+            const [decisions, setDecisions] = useState([]);
+            const [summary, setSummary] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [autoRefresh, setAutoRefresh] = useState(false);
+            const [lastUpdate, setLastUpdate] = useState(null);
+            const [activeTab, setActiveTab] = useState('overview');
+            const [error, setError] = useState(null);
+            const [apiStatus, setApiStatus] = useState('checking');
+
+            // Test API connectivity
+            const testApi = useCallback(async () => {
+                try {
+                    console.log('Testing API at:', API_BASE_URL);
+                    const response = await fetch(`${API_BASE_URL}/`, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                        }
+                    });
+                    console.log('API test response:', response.status);
+                    
+                    if (response.ok) {
+                        setApiStatus('connected');
+                        setError(null);
+                        return true;
+                    } else {
+                        setApiStatus('error');
+                        setError(`API returned status ${response.status}`);
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('API test error:', error);
+                    setApiStatus('error');
+                    setError(`Cannot connect to API: ${error.message}`);
+                    return false;
+                }
+            }, []);
+
+            const fetchNodes = useCallback(async () => {
+                try {
+                    console.log('Fetching nodes from:', `${API_BASE_URL}/nodes/`);
+                    const response = await fetch(`${API_BASE_URL}/nodes/`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Nodes data:', data);
+                    
+                    // Handle both paginated and non-paginated responses
+                    const nodesList = data.results || data;
+                    setNodes(Array.isArray(nodesList) ? nodesList : []);
+                    setError(null);
+                } catch (error) {
+                    console.error('Error fetching nodes:', error);
+                    setError(`Failed to fetch nodes: ${error.message}`);
+                }
+            }, []);
+
+            const fetchSummary = useCallback(async () => {
+                try {
+                    console.log('Fetching summary from:', `${API_BASE_URL}/nodes/network_summary/`);
+                    const response = await fetch(`${API_BASE_URL}/nodes/network_summary/`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Summary data:', data);
+                    setSummary(data);
+                } catch (error) {
+                    console.error('Error fetching summary:', error);
+                    // Don't set error here as summary might not exist yet
+                }
+            }, []);
+
+            const fetchDecisions = useCallback(async () => {
+                try {
+                    console.log('Fetching decisions from:', `${API_BASE_URL}/decisions/`);
+                    const response = await fetch(`${API_BASE_URL}/decisions/`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Decisions data:', data);
+                    
+                    const decisionsList = data.results || data;
+                    setDecisions(Array.isArray(decisionsList) ? decisionsList : []);
+                } catch (error) {
+                    console.error('Error fetching decisions:', error);
+                }
+            }, []);
+
+            const initializeNetwork = async () => {
+                setLoading(true);
+                setError(null);
+                
+                try {
+                    console.log('Initializing network...');
+                    const response = await fetch(`${API_BASE_URL}/nodes/initialize_network/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Initialize response:', data);
+                    
+                    if (data.status === 'success') {
+                        await fetchAll();
+                        alert(`✓ Network initialized successfully! Created ${data.nodes?.length || 0} nodes.`);
+                    }
+                } catch (error) {
+                    console.error('Error initializing network:', error);
+                    setError(`Failed to initialize network: ${error.message}`);
+                    alert(`Error: ${error.message}`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const runAgentCycle = async () => {
+                setLoading(true);
+                setError(null);
+                
+                try {
+                    console.log('Running agent cycle...');
+                    const response = await fetch(`${API_BASE_URL}/decisions/run_agent_cycle/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('Agent cycle response:', data);
+                    
+                    if (data.status === 'success') {
+                        await fetchAll();
+                        setLastUpdate(new Date());
+                        
+                        // Show success message
+                        const results = data.results || {};
+                        alert(`✓ Agent cycle completed!\n\nInventory Decisions: ${results.inventory_decisions || 0}\nTransport Decisions: ${results.transport_decisions || 0}\nService Alerts: ${results.service_alerts || 0}`);
+                    } else {
+                        throw new Error(data.message || 'Agent cycle failed');
+                    }
+                } catch (error) {
+                    console.error('Error running agent cycle:', error);
+                    setError(`Failed to run agent cycle: ${error.message}`);
+                    alert(`Error: ${error.message}\n\nMake sure the network is initialized first!`);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const fetchAll = useCallback(async () => {
+                console.log('Fetching all data...');
+                await Promise.all([fetchNodes(), fetchSummary(), fetchDecisions()]);
+                console.log('All data fetched');
+            }, [fetchNodes, fetchSummary, fetchDecisions]);
+
+            // Auto-refresh effect
+            useEffect(() => {
+                let interval;
+                if (autoRefresh && apiStatus === 'connected') {
+                    console.log('Auto-refresh enabled');
+                    interval = setInterval(() => {
+                        console.log('Auto-refreshing...');
+                        fetchAll();
+                    }, 5000);
+                }
+                return () => {
+                    if (interval) {
+                        console.log('Auto-refresh disabled');
+                        clearInterval(interval);
+                    }
+                };
+            }, [autoRefresh, apiStatus, fetchAll]);
+
+            // Initial load and API test
+            useEffect(() => {
+                console.log('Initial load - testing API...');
+                testApi().then(connected => {
+                    if (connected) {
+                        console.log('API connected, fetching initial data...');
+                        fetchAll();
+                    }
+                });
+            }, [testApi, fetchAll]);
+
+            const getUrgencyColor = (urgency) => {
+                switch (urgency) {
+                    case 'CRITICAL': return 'bg-red-600';
+                    case 'HIGH': return 'bg-orange-600';
+                    case 'MEDIUM': return 'bg-yellow-600';
+                    case 'LOW': return 'bg-green-600';
+                    default: return 'bg-gray-600';
+                }
+            };
+
+            const getInventoryColor = (ratio) => {
+                if (ratio < 0.3) return 'bg-red-500';
+                if (ratio < 0.6) return 'bg-yellow-500';
+                return 'bg-green-500';
+            };
+
+            const OverviewTab = () => (
+                <div className="space-y-6">
+                    {/* Error Banner */}
+                    {error && (
+                        <div className="error-banner">
+                            <strong>⚠ Error:</strong> {error}
+                            <br />
+                            <small>Check the browser console (F12) for more details.</small>
+                        </div>
+                    )}
+
+                    {/* API Status */}
+                    <div className={`p-4 rounded-lg ${apiStatus === 'connected' ? 'bg-green-100' : apiStatus === 'error' ? 'bg-red-100' : 'bg-yellow-100'}`}>
+                        <strong>API Status:</strong> {apiStatus === 'connected' ? '✓ Connected' : apiStatus === 'error' ? '✗ Error' : '⟳ Checking...'}
+                        <br />
+                        <small>API URL: {API_BASE_URL}</small>
+                    </div>
+
+                    {/* Key Metrics */}
+                    {summary && (
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg p-6 text-white">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Package size={24} />
+                                    <TrendingUp size={20} className="opacity-75" />
+                                </div>
+                                <div className="text-3xl font-bold">{summary.total_nodes}</div>
+                                <div className="text-blue-200 text-sm">Total Nodes</div>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-lg p-6 text-white">
+                                <div className="flex items-center justify-between mb-2">
+                                    <BarChart3 size={24} />
+                                    <Activity size={20} className="opacity-75" />
+                                </div>
+                                <div className="text-3xl font-bold">{summary.total_inventory.toLocaleString()}</div>
+                                <div className="text-purple-200 text-sm">Total Inventory</div>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-green-600 to-green-700 rounded-lg p-6 text-white">
+                                <div className="flex items-center justify-between mb-2">
+                                    <TrendingUp size={24} />
+                                    <Activity size={20} className="opacity-75" />
+                                </div>
+                                <div className="text-3xl font-bold">{summary.utilization_rate.toFixed(1)}%</div>
+                                <div className="text-green-200 text-sm">Utilization Rate</div>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg p-6 text-white">
+                                <div className="flex items-center justify-between mb-2">
+                                    <AlertCircle size={24} />
+                                    <Activity size={20} className="opacity-75" />
+                                </div>
+                                <div className="text-3xl font-bold">
+                                    {decisions.filter(d => d.urgency === 'HIGH' || d.urgency === 'CRITICAL').length}
+                                </div>
+                                <div className="text-orange-200 text-sm">Critical Alerts</div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Network Nodes */}
+                    <div className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                            <Package className="text-blue-600" />
+                            Network Nodes ({nodes.length})
+                        </h2>
+                        
+                        {nodes.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                                <p className="mb-4">No nodes found. Click "Initialize Network" to get started.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {nodes.map((node) => {
+                                    const inventoryRatio = node.current_inventory / node.inventory_capacity;
+                                    return (
+                                        <div key={node.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <h3 className="font-semibold text-lg">{node.name}</h3>
+                                                    <span className="text-xs text-gray-500 uppercase">{node.node_type}</span>
+                                                </div>
+                                                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-mono">
+                                                    {node.code}
+                                                </span>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                                <div>
+                                                    <div className="flex justify-between text-sm mb-1">
+                                                        <span className="text-gray-600">Inventory</span>
+                                                        <span className="font-mono font-semibold">
+                                                            {node.current_inventory.toLocaleString()} / {node.inventory_capacity.toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                                        <div
+                                                            className={`h-2 rounded-full transition-all ${getInventoryColor(inventoryRatio)}`}
+                                                            style={{ width: `${Math.min(inventoryRatio * 100, 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-gray-600">Utilization:</span>
+                                                    <span className={`font-semibold ${
+                                                        inventoryRatio < 0.3 ? 'text-red-600' :
+                                                        inventoryRatio < 0.6 ? 'text-yellow-600' : 'text-green-600'
+                                                    }`}>
+                                                        {(inventoryRatio * 100).toFixed(1)}%
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Recent Decisions */}
+                    <div className="bg-white rounded-lg shadow-lg p-6">
+                        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                            <Activity className="text-purple-600" />
+                            Recent Agent Decisions ({decisions.length})
+                        </h2>
+                        
+                        {decisions.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500">
+                                <p>No decisions yet. Run an agent cycle to see decisions.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                                {decisions.slice(0, 10).map((decision) => (
+                                    <div
+                                        key={decision.id}
+                                        className="border-l-4 bg-gray-50 rounded p-3 hover:bg-gray-100 transition"
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                    <span className="font-semibold text-gray-800">{decision.agent_name}</span>
+                                                    <span className="text-xs text-gray-500">•</span>
+                                                    <span className="text-sm text-gray-600">{decision.decision_type}</span>
+                                                    <span className={`px-2 py-0.5 rounded text-xs text-white ${getUrgencyColor(decision.urgency)}`}>
+                                                        {decision.urgency}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-gray-700">{decision.reason}</p>
+                                                {decision.quantity && (
+                                                    <p className="text-xs text-gray-500 mt-1">Quantity: {decision.quantity.toLocaleString()}</p>
+                                                )}
+                                                {decision.estimated_cost && (
+                                                    <p className="text-xs text-gray-500">Est. Cost: ${decision.estimated_cost.toFixed(2)}</p>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-400 whitespace-nowrap ml-4">
+                                                {new Date(decision.created_at).toLocaleTimeString()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+
+            const AnalyticsTab = () => {
+                if (decisions.length === 0) {
+                    return (
+                        <div className="text-center py-12 text-gray-500">
+                            <p className="text-lg mb-2">No analytics data available yet.</p>
+                            <p>Run an agent cycle to generate decisions and view analytics.</p>
+                        </div>
+                    );
+                }
+
+                const decisionsByAgent = decisions.reduce((acc, d) => {
+                    acc[d.agent_name] = (acc[d.agent_name] || 0) + 1;
+                    return acc;
+                }, {});
+
+                const decisionsByType = decisions.reduce((acc, d) => {
+                    acc[d.decision_type] = (acc[d.decision_type] || 0) + 1;
+                    return acc;
+                }, {});
+
+                return (
+                    <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <h3 className="text-lg font-bold mb-4">Decisions by Agent</h3>
+                                <div className="space-y-3">
+                                    {Object.entries(decisionsByAgent).map(([agent, count]) => (
+                                        <div key={agent}>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="text-gray-700">{agent}</span>
+                                                <span className="font-semibold">{count}</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-blue-600 h-2 rounded-full"
+                                                    style={{ width: `${(count / decisions.length) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <h3 className="text-lg font-bold mb-4">Decisions by Type</h3>
+                                <div className="space-y-3">
+                                    {Object.entries(decisionsByType).map(([type, count]) => (
+                                        <div key={type}>
+                                            <div className="flex justify-between text-sm mb-1">
+                                                <span className="text-gray-700">{type}</span>
+                                                <span className="font-semibold">{count}</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-purple-600 h-2 rounded-full"
+                                                    style={{ width: `${(count / decisions.length) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {summary && (
+                            <div className="bg-white rounded-lg shadow-lg p-6">
+                                <h3 className="text-lg font-bold mb-4">Network Distribution by Type</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    {Object.entries(summary.by_type).map(([type, data]) => (
+                                        <div key={type} className="border rounded-lg p-4">
+                                            <div className="text-2xl font-bold text-gray-800">{data.count}</div>
+                                            <div className="text-sm text-gray-600 mb-2">{type} Nodes</div>
+                                            <div className="text-xs text-gray-500">
+                                                Inventory: {data.total_inventory.toLocaleString()}
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                Utilization: {data.total_capacity > 0 ? ((data.total_inventory / data.total_capacity) * 100).toFixed(1) : 0}%
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+                    <header className="bg-gray-800/50 backdrop-blur-sm border-b border-blue-500/20">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <Activity className="text-blue-400" size={32} />
+                                    <div>
+                                        <h1> className="text-2xl font-bold text-white"Supply Chain Control Center</h1>
+                                        <p className="text-sm text-gray-400">Multi-Agent Optimization System</p>
+                                    </div>
+                                </div>
+                                
+                                {lastUpdate && (
+                                    <div className="text-sm text-gray-400">
+                                        Last update: {lastUpdate.toLocaleTimeString()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <button
+                                        onClick={initializeNetwork}
+                                        disabled={loading}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium"
+                                    >
+                                        <Settings size={20} />
+                                        Initialize Network
+                                    </button>
+                                    
+                                    <button
+                                        onClick={runAgentCycle}
+                                        disabled={loading || nodes.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium"
+                                        title={nodes.length === 0 ? "Initialize network first" : ""}
+                                    >
+                                        {loading ? <RefreshCw size={20} className="animate-spin" /> : <Play size={20} />}
+                                        Run Agent Cycle
+                                    </button>
+                                    
+                                    <button
+                                        onClick={fetchAll}
+                                        disabled={loading}
+                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white rounded-lg transition font-medium"
+                                    >
+                                        <RefreshCw size={20} />
+                                        Refresh Data
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => setAutoRefresh(!autoRefresh)}
+                                        disabled={apiStatus !== 'connected'}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition font-medium ${
+                                            autoRefresh 
+                                                ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                                                : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+                                        } disabled:bg-gray-300 disabled:text-gray-500`}
+                                    >
+                                        {autoRefresh ? <Pause size={20} /> : <Play size={20} />}
+                                        Auto-Refresh {autoRefresh && '(5s)'}
+                                    </button>
+                                </div>
+                                
+                                <div className="flex items-center gap-2 text-sm">
+                                    <div className={`w-3 h-3 rounded-full ${
+                                        loading ? 'bg-yellow-500 animate-pulse' : 
+                                        apiStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'
+                                    }`} />
+                                    <span className="text-gray-700 font-medium">
+                                        {loading ? 'Processing...' : 
+                                         apiStatus === 'connected' ? 'System Ready' : 'Connection Error'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-lg mb-6">
+                            <div className="border-b border-gray-200">
+                                <nav className="flex -mb-px">
+                                    <button
+                                        onClick={() => setActiveTab('overview')}
+                                        className={`px-6 py-3 font-medium text-sm border-b-2 transition ${
+                                            activeTab === 'overview'
+                                                ? 'border-blue-600 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        Overview
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveTab('analytics')}
+                                        className={`px-6 py-3 font-medium text-sm border-b-2 transition ${
+                                            activeTab === 'analytics'
+                                                ? 'border-blue-600 text-blue-600'
+                                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        }`}
+                                    >
+                                        Analytics
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
+
+                        {activeTab === 'overview' ? <OverviewTab /> : <AnalyticsTab />}
+                    </main>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<Dashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>
