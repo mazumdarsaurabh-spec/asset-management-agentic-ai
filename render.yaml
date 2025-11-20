@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: supply-chain-agent
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn Supply_Chain_Pro.wsgi:application --timeout 600"
+    plan: free
+    region: singapore
+    envVars:
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
