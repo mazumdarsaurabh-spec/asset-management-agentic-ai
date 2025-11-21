@@ -95,13 +95,13 @@ msgpack==1.1.2
 multidict==6.7.0
 mypy_extensions==1.1.0
 nest-asyncio==1.6.0
-numpy==1.26.4
+numpy==1.24.4
 openai==1.109.1
 openpyxl==3.1.5
 orjson==3.11.4
 ormsgpack==1.11.0
-packaging==24.1
-pandas==2.2.2
+packaging==23.2
+pandas==2.0.3
 parso==0.8.4
 phonenumbers==9.0.17
 pillow==11.2.1
