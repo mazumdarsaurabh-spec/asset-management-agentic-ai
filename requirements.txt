@@ -132,7 +132,7 @@ python-barcode==0.16.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.0
 pytz==2025.2
-pywin32==310
+
 PyYAML==6.0.3
 pyzmq==26.4.0
 redis==5.0.1
